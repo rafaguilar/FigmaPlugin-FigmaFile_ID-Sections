@@ -398,7 +398,7 @@ async function fetchSheetData(apiKey, spreadsheetId) {
 // =============================================================================
 
 async function processRow(row, rowNumber, sourceSections) {
-  // Step 1: Generate page name from columns B, C, D, E
+  // Step 1: Generate page name from columns A, B, C, D
   const pageName = generateFileName(row);
   
   if (!pageName || pageName.trim() === '') {
@@ -413,21 +413,28 @@ async function processRow(row, rowNumber, sourceSections) {
     return null;
   }
   
-  // 🐛 DEBUG MODE: Just log what WOULD be created - DON'T actually create anything
-  console.log('═══════════════════════════════════════════════════════════');
-  console.log('📄 ROW ' + rowNumber + ' - DEBUG MODE (NOT CREATING)');
-  console.log('═══════════════════════════════════════════════════════════');
-  console.log('📝 Would create page: "' + pageName + '"');
-  console.log('📦 Would include sections (' + sectionsToInclude.length + '):');
-  for (let i = 0; i < sectionsToInclude.length; i++) {
-    console.log('   ' + (i + 1) + '. ' + sectionsToInclude[i]);
-  }
-  console.log('═══════════════════════════════════════════════════════════');
-  console.log('');
+  console.log('Row ' + rowNumber + ': Creating page "' + pageName + '" with sections: ' + sectionsToInclude.join(', '));
   
-  // DON'T actually create pages or copy sections in DEBUG mode
-  // Just return null
-  return null;
+  // Step 3: Create new page in current file
+  const newPage = figma.createPage();
+  newPage.name = pageName;
+  
+  // Step 3.5: 🔒 CRITICAL - Switch to the new page IMMEDIATELY to prevent writing to Source_Template
+  console.log('🔒 SWITCHING to newly created page: "' + pageName + '"');
+  figma.currentPage = newPage;
+  console.log('✅ Current page is now: "' + figma.currentPage.name + '"');
+  
+  // Step 4: Copy sections to the page with improved error handling
+  await copySectionsToPage(newPage, sectionsToInclude, sourceSections, rowNumber);
+  
+  // Step 5: Verify we're still on the correct page
+  if (figma.currentPage !== newPage) {
+    console.error('⚠️ WARNING: Current page changed unexpectedly! Switching back...');
+    figma.currentPage = newPage;
+  }
+  
+  // Return the created page
+  return newPage;
 }
 
 function generateFileName(row) {
@@ -652,8 +659,42 @@ async function copySectionsToPage(targetPage, sectionNames, sourceSections, rowN
     } catch (error) {
       console.error('  ❌❌❌ EXCEPTION while copying "' + sectionName + '": ' + error.message);
       console.error('  Stack: ' + error.stack);
-      // Don't create error placeholders - just skip failed sections
-      // This prevents duplicate sections from appearing when font loading fails
+      
+      // ⚠️ CRITICAL FIX: Still advance position even when section fails!
+      // This prevents subsequent sections from overlapping at the same position
+      if (sourceSection) {
+        // Use the source section's dimensions to advance position
+        rowHeight = Math.max(rowHeight, sourceSection.height);
+        currentX += sourceSection.width + CONFIG.SECTION_SPACING;
+        sectionsInCurrentRow++;
+        
+        console.warn('  ➡️ Skipping failed section but advancing position to prevent overlap');
+        console.warn('  📍 Next section will be at X: ' + currentX);
+        
+        // Check if we need to start a new row
+        if (sectionsInCurrentRow >= CONFIG.SECTIONS_PER_ROW) {
+          currentX = CONFIG.PAGE_MARGIN;
+          currentY += rowHeight + CONFIG.SECTION_SPACING;
+          rowHeight = 0;
+          sectionsInCurrentRow = 0;
+        }
+      } else {
+        // If we don't have dimensions, use a default size to advance
+        const defaultWidth = 600;
+        const defaultHeight = 400;
+        rowHeight = Math.max(rowHeight, defaultHeight);
+        currentX += defaultWidth + CONFIG.SECTION_SPACING;
+        sectionsInCurrentRow++;
+        
+        console.warn('  ➡️ Using default dimensions to advance position');
+        
+        if (sectionsInCurrentRow >= CONFIG.SECTIONS_PER_ROW) {
+          currentX = CONFIG.PAGE_MARGIN;
+          currentY += rowHeight + CONFIG.SECTION_SPACING;
+          rowHeight = 0;
+          sectionsInCurrentRow = 0;
+        }
+      }
     }
   }
   
