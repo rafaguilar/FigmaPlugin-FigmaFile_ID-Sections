@@ -175,6 +175,13 @@ async function generateFilesFromSheet(apiKey, spreadsheetId, deleteMasterTemplat
           createdPages.push(newPage);
         }
         successCount++;
+        
+        // 🔒 CRITICAL: Add delay between rows to give Figma breathing room
+        // This prevents race conditions when processing consecutive rows
+        if (i < dataRows.length - 1) { // Don't delay after last row
+          console.log('⏸️ Pausing 500ms before next row to stabilize Figma...');
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
 
       } catch (error) {
         console.error('Error processing row ' + (i + 1) + ':', error);
@@ -419,33 +426,53 @@ async function processRow(row, rowNumber, sourceSections) {
   const newPage = figma.createPage();
   newPage.name = pageName;
 
-  // Step 3.5: 🔒 CRITICAL - Switch to the new page with VERIFICATION
-  console.log('🔒 SWITCHING to newly created page: "' + pageName + '"');
+  // Step 3.5: 🔒🔒🔒 ULTRA-CRITICAL - FORCE SWITCH to new page with AGGRESSIVE RETRY
+  console.log('🔒🔒🔒 FORCE SWITCHING to newly created page: "' + pageName + '"');
   
-  // Try multiple times if needed (Figma API sometimes delays page switches)
+  // AGGRESSIVE RETRY: 15 attempts with 200ms delays
   let switchAttempts = 0;
-  const maxAttempts = 3;
+  const maxAttempts = 15;
+  let switchSuccess = false;
   
-  while (figma.currentPage !== newPage && switchAttempts < maxAttempts) {
+  while (switchAttempts < maxAttempts) {
     figma.currentPage = newPage;
     switchAttempts++;
     
-    // Small delay to let Figma process the switch
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // LONGER delay to let Figma fully process the switch (200ms)
+    await new Promise(resolve => setTimeout(resolve, 200));
     
+    // DOUBLE-CHECK: Verify the switch stuck
     if (figma.currentPage === newPage) {
-      console.log('✅ Successfully switched to: "' + figma.currentPage.name + '" (attempt ' + switchAttempts + ')');
-      break;
+      console.log('✅ FORCE SWITCH SUCCESS: "' + figma.currentPage.name + '" (attempt ' + switchAttempts + ')');
+      
+      // TRIPLE VERIFICATION: Wait and check again to ensure it's stable
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      if (figma.currentPage === newPage) {
+        console.log('✅✅ SWITCH VERIFIED STABLE after 100ms hold');
+        switchSuccess = true;
+        break;
+      } else {
+        console.warn('⚠️⚠️ Switch was UNSTABLE! Page changed to: "' + figma.currentPage.name + '" - Retrying...');
+      }
     } else {
-      console.warn('⚠️ Switch attempt ' + switchAttempts + ' failed, current page is: "' + figma.currentPage.name + '"');
+      console.warn('⚠️ Force switch attempt ' + switchAttempts + ' failed, current page: "' + figma.currentPage.name + '"');
     }
   }
   
-  // Final verification
-  if (figma.currentPage !== newPage) {
-    console.error('❌ CRITICAL: Failed to switch to new page after ' + maxAttempts + ' attempts!');
+  // Final verification with detailed error
+  if (!switchSuccess) {
+    console.error('❌❌❌ CRITICAL: Failed to FORCE SWITCH to new page after ' + maxAttempts + ' aggressive attempts!');
     console.error('   Current page: "' + figma.currentPage.name + '"');
     console.error('   Target page: "' + newPage.name + '"');
+    console.error('   SKIPPING THIS ROW to prevent corruption!');
+    
+    figma.ui.postMessage({
+      type: 'error',
+      message: '❌ Row ' + rowNumber + ': Failed to switch to new page - SKIPPED'
+    });
+    
+    return; // Skip this entire row
   } else {
     console.log('✅ Current page confirmed: "' + figma.currentPage.name + '"');
   }
@@ -602,41 +629,54 @@ async function copySectionsToPage(targetPage, sectionNames, sourceSections, rowN
   console.log('Target page: ' + targetPage.name);
   console.log('Sections to copy: ' + sectionNames.join(', '));
 
-  // 🔒 CRITICAL: Lock to target page with retry and verification
-  console.log('🔒 Initial page lock attempt...');
+  // 🔒🔒🔒 ULTRA-CRITICAL: FORCE LOCK to target page with AGGRESSIVE RETRY
+  console.log('🔒🔒🔒 FORCE LOCKING to target page...');
   
   let lockAttempts = 0;
-  const maxLockAttempts = 5;
+  const maxLockAttempts = 15;
+  let lockSuccess = false;
   
-  while (figma.currentPage !== targetPage && lockAttempts < maxLockAttempts) {
+  while (lockAttempts < maxLockAttempts) {
     figma.currentPage = targetPage;
     lockAttempts++;
     
-    // Small delay to let Figma process
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // LONGER delay to ensure Figma processes the lock (300ms)
+    await new Promise(resolve => setTimeout(resolve, 300));
     
+    // DOUBLE-CHECK: Verify the lock stuck
     if (figma.currentPage === targetPage) {
-      console.log('✅ Page locked successfully (attempt ' + lockAttempts + ')');
-      break;
+      console.log('✅ FORCE LOCK SUCCESS (attempt ' + lockAttempts + ')');
+      
+      // TRIPLE VERIFICATION: Wait and check again to ensure stability
+      await new Promise(resolve => setTimeout(resolve, 150));
+      
+      if (figma.currentPage === targetPage) {
+        console.log('✅✅ LOCK VERIFIED STABLE after 150ms hold');
+        lockSuccess = true;
+        break;
+      } else {
+        console.warn('⚠️⚠️ Lock was UNSTABLE! Page changed to: "' + figma.currentPage.name + '" - Retrying...');
+      }
     } else {
-      console.warn('⚠️ Lock attempt ' + lockAttempts + ' failed, current: "' + figma.currentPage.name + '"');
+      console.warn('⚠️ Force lock attempt ' + lockAttempts + ' failed, current: "' + figma.currentPage.name + '"');
     }
   }
   
-  // Final verification before proceeding
-  if (figma.currentPage !== targetPage) {
-    console.error('❌ CRITICAL: Failed to lock to target page after ' + maxLockAttempts + ' attempts!');
+  // Final verification with hard abort if failed
+  if (!lockSuccess) {
+    console.error('❌❌❌ CRITICAL: Failed to FORCE LOCK target page after ' + maxLockAttempts + ' aggressive attempts!');
     console.error('   Current: "' + figma.currentPage.name + '" | Target: "' + targetPage.name + '"');
+    console.error('   ABORTING ALL SECTIONS for this row to prevent corruption!');
     
     figma.ui.postMessage({
       type: 'error',
-      message: '❌ Failed to switch to page "' + targetPage.name + '" - all sections skipped'
+      message: '❌ Row ' + rowNumber + ': Failed to lock page "' + targetPage.name + '" - ALL SECTIONS SKIPPED'
     });
     
-    return;
+    return; // Hard abort - skip all sections for this row
   }
   
-  console.log('✅ Current page locked to: ' + figma.currentPage.name);
+  console.log('✅✅✅ Page FORCE LOCKED and STABLE: ' + figma.currentPage.name);
 
   // Track successful and failed sections
   const successfulSections = [];
