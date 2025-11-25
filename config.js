@@ -5,7 +5,7 @@
 // =============================================================================
 
 // Your Google Sheets API Key (get from Google Cloud Console)
-const GOOGLE_SHEETS_API_KEY = 'AIzaSyC55La9khFWuMKnBA-9ORaaDH9NYyWfncc';
+const GOOGLE_SHEETS_API_KEY = 'HERE YOUR GOOGLE_APY_KEY';
 
 // Your Spreadsheet ID (from the URL: docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit)
 const SPREADSHEET_ID = '1HneZCjZcNQ2I6I3HkWRda7FE_a0Z9RTHtoNAZjPfFws';
@@ -113,7 +113,7 @@ SECTION REQUIREMENTS:
 function validateConfiguration() {
   const errors = [];
   
-  if (!GOOGLE_SHEETS_API_KEY || GOOGLE_SHEETS_API_KEY === 'AIzaSyC55La9khFWuMKnBA-9ORaaDH9NYyWfncc') {
+  if (!GOOGLE_SHEETS_API_KEY || GOOGLE_SHEETS_API_KEY === 'HERE YOUR GOOGLE_APY_KEY') {
     errors.push('Google Sheets API key not configured');
   }
   

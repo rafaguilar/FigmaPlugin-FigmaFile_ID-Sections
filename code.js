@@ -8,7 +8,7 @@ figma.showUI(__html__, { width: 400, height: 600 });
 // =============================================================================
 
 const CONFIG = {
-  GOOGLE_SHEETS_API_KEY: 'AIzaSyC55La9khFWuMKnBA-9ORaaDH9NYyWfncc', // Set this from your config
+  GOOGLE_SHEETS_API_KEY: 'HERE YOUR GOOGLE_APY_KEY', // Set this from your config
   SPREADSHEET_ID: '1HneZCjZcNQ2I6I3HkWRda7FE_a0Z9RTHtoNAZjPfFws', // Set this from your config 
   RANGE: 'Sheet1!A:R', // Updated range to accommodate new columns (A-R = 18 columns)
   
