@@ -1,0 +1,97 @@
+SIMPLIFIED DEBUG VERSION - Replace copySectionsToPage function
+==============================================================
+
+Find the copySectionsToPage function (starts around line 575) and replace it with this SIMPLIFIED version:
+
+async function copySectionsToPage(targetPage, sectionNames, sourceSections, rowNumber) {
+  console.log('\n=== ROW ' + rowNumber + ' START ===');
+  console.log('Target page: ' + targetPage.name);
+  console.log('Sections to copy: ' + sectionNames.join(', '));
+  
+  // Force page switch
+  figma.currentPage = targetPage;
+  console.log('Current page set to: ' + figma.currentPage.name);
+  
+  let currentX = CONFIG.PAGE_MARGIN;
+  let currentY = CONFIG.PAGE_MARGIN;
+  let rowHeight = 0;
+  let sectionsInCurrentRow = 0;
+  
+  for (let i = 0; i < sectionNames.length; i++) {
+    const sectionName = sectionNames[i];
+    
+    console.log('\n--- Section ' + (i + 1) + ': ' + sectionName + ' ---');
+    
+    // Find section
+    const sourceSection = sourceSections.find(function (section) {
+      return section.name === sectionName;
+    });
+    
+    if (!sourceSection) {
+      console.log('SKIP: Not found in source');
+      continue;
+    }
+    
+    console.log('BEFORE CLONE:');
+    console.log('  figma.currentPage.name = ' + figma.currentPage.name);
+    console.log('  targetPage.name = ' + targetPage.name);
+    console.log('  Are they same? ' + (figma.currentPage === targetPage));
+    
+    try {
+      // THE CRITICAL MOMENT - CLONE
+      console.log('CLONING NOW...');
+      const clonedSection = sourceSection.node.clone();
+      
+      console.log('AFTER CLONE:');
+      console.log('  figma.currentPage.name = ' + figma.currentPage.name);
+      console.log('  Clone parent: ' + (clonedSection.parent ? clonedSection.parent.name : 'NO PARENT'));
+      console.log('  Are pages still same? ' + (figma.currentPage === targetPage));
+      
+      // Set position
+      clonedSection.x = currentX;
+      clonedSection.y = currentY;
+      
+      console.log('APPENDING TO TARGET PAGE...');
+      targetPage.appendChild(clonedSection);
+      
+      console.log('SUCCESS: ' + sectionName + ' copied');
+      
+      // Update position
+      rowHeight = Math.max(rowHeight, sourceSection.height);
+      currentX += sourceSection.width + CONFIG.SECTION_SPACING;
+      sectionsInCurrentRow++;
+      
+    } catch (error) {
+      console.log('FAILED: ' + sectionName);
+      console.log('Error: ' + error.message);
+      console.log('STOPPING ROW');
+      throw error;
+    }
+  }
+  
+  console.log('\n=== ROW ' + rowNumber + ' COMPLETE ===\n');
+}
+
+
+WHAT TO LOOK FOR IN CONSOLE:
+=============================
+When you run this, focus on the Rides-Masthead or Eats-Masthead section:
+
+1. BEFORE CLONE:
+   - What is figma.currentPage.name?
+   - What is targetPage.name?
+   - Are they the same?
+
+2. AFTER CLONE:
+   - Did figma.currentPage.name change?
+   - What is the clone's parent?
+   - Did the pages become different?
+
+3. Check Source_Template page:
+   - Are duplicates appearing there?
+   - If YES, it means clone is being created on wrong page
+
+SHARE WITH ME:
+==============
+Copy/paste the ENTIRE console output for ONE row that includes Rides-Masthead or Eats-Masthead.
+This will tell us EXACTLY where the problem is happening!

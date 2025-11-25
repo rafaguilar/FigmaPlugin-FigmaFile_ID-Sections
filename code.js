@@ -29,7 +29,7 @@ const CONFIG = {
   GOOGLE_SHEETS_API_KEY: 'YOUR_GOOGLE_SHEETS_API_KEY_HERE', // ⚠️ Replace with your API key
   SPREADSHEET_ID: 'YOUR_SPREADSHEET_ID_HERE',               // ⚠️ Replace with your spreadsheet ID
   RANGE: 'Sheet1!A:R', // Range to read (A-R = 18 columns)
-  
+
   // Plugin Settings
   SECTION_SPACING: 250,
   MAX_FILENAME_PART_LENGTH: 50,
@@ -83,20 +83,20 @@ const SECTION_NAMES = {
 // MAIN PLUGIN LOGIC
 // =============================================================================
 
-figma.ui.onmessage = async function(msg) {
+figma.ui.onmessage = async function (msg) {
   try {
     if (msg.type === 'start-generation') {
       await generateFilesFromSheet(msg.apiKey, msg.spreadsheetId, msg.deleteMasterTemplates);
     }
-    
+
     if (msg.type === 'test-connection') {
       await testGoogleSheetsConnection(msg.apiKey, msg.spreadsheetId);
     }
-    
+
     if (msg.type === 'delete-master-templates') {
       await deleteMasterTemplatesPage();
     }
-    
+
     if (msg.type === 'cancel') {
       figma.closePlugin();
     }
@@ -113,91 +113,91 @@ async function generateFilesFromSheet(apiKey, spreadsheetId, deleteMasterTemplat
     // Update config with user inputs
     CONFIG.GOOGLE_SHEETS_API_KEY = apiKey;
     CONFIG.SPREADSHEET_ID = spreadsheetId;
-    
+
     // Step 1: Validate configuration
     figma.ui.postMessage({ type: 'status', message: 'Validating configuration...' });
     validateConfiguration();
-    
+
     // Step 2: Load sections from current file
     figma.ui.postMessage({ type: 'status', message: 'Looking for sections in current file...' });
     const sourceSections = await loadSourceFileSections();
-    
+
     if (sourceSections.length === 0) {
       throw new Error('No sections found in current file');
     }
-    
-    figma.ui.postMessage({ 
-      type: 'status', 
+
+    figma.ui.postMessage({
+      type: 'status',
       message: 'Found ' + sourceSections.length + ' sections in current file'
     });
-    
+
     // SAFETY: Create a temporary working page and switch to it
     // This ensures we're not accidentally modifying Source_Template
     const tempWorkingPage = figma.createPage();
     tempWorkingPage.name = '_TEMP_WORKING_PAGE';
     figma.currentPage = tempWorkingPage;
-    
+
     // Step 3: Fetch data from Google Sheets
     figma.ui.postMessage({ type: 'status', message: 'Fetching data from Google Sheets...' });
     const sheetData = await fetchSheetData(apiKey, spreadsheetId);
-    
+
     if (!sheetData || sheetData.length === 0) {
       throw new Error('No data found in the specified sheet range');
     }
-    
+
     // Step 4: Process each row (skip header row)
-    const dataRows = sheetData.slice(1).filter(function(row) { return row && row.length > 0; });
-    
+    const dataRows = sheetData.slice(1).filter(function (row) { return row && row.length > 0; });
+
     if (dataRows.length === 0) {
       throw new Error('No data rows found to process');
     }
-    
-    figma.ui.postMessage({ 
-      type: 'status', 
+
+    figma.ui.postMessage({
+      type: 'status',
       message: 'Found ' + dataRows.length + ' rows to process. Starting generation...'
     });
-    
+
     let successCount = 0;
     let errorCount = 0;
     let createdPages = [];
-    
+
     for (let i = 0; i < dataRows.length; i++) {
       const row = dataRows[i];
-      
+
       try {
-        figma.ui.postMessage({ 
-          type: 'status', 
+        figma.ui.postMessage({
+          type: 'status',
           message: 'Processing row ' + (i + 1) + ' of ' + dataRows.length + ': ' + generateFileName(row)
         });
-        
+
         const newPage = await processRow(row, i + 1, sourceSections);
         if (newPage) {
           createdPages.push(newPage);
         }
         successCount++;
-        
+
       } catch (error) {
         console.error('Error processing row ' + (i + 1) + ':', error);
         errorCount++;
-        
-        figma.ui.postMessage({ 
-          type: 'warning', 
+
+        figma.ui.postMessage({
+          type: 'warning',
           message: 'Row ' + (i + 1) + ' failed: ' + error.message
         });
       }
     }
-    
+
     // Step 5: Optional cleanup - Remove MASTER TEMPLATES page if requested
     if (deleteMasterTemplates && createdPages.length > 0) {
       figma.ui.postMessage({ type: 'status', message: 'Cleaning up template pages...' });
       await cleanupMasterTemplatesPage(createdPages[0]);
     } else if (deleteMasterTemplates) {
-      figma.ui.postMessage({ 
-        type: 'warning', 
+      figma.ui.postMessage({
+        type: 'warning',
         message: 'Could not cleanup MASTER TEMPLATES page - no pages were created successfully'
       });
     }
-    
+
     // Step 6: Remove temporary working page
     figma.ui.postMessage({ type: 'status', message: 'Cleaning up temporary working page...' });
     if (tempWorkingPage) {
@@ -207,14 +207,14 @@ async function generateFilesFromSheet(apiKey, spreadsheetId, deleteMasterTemplat
       } else {
         // DEBUG MODE: No pages created, just remove temp page
         // First switch to another page before removing temp
-        const otherPages = figma.root.children.filter(function(p) { return p.type === 'PAGE' && p !== tempWorkingPage; });
+        const otherPages = figma.root.children.filter(function (p) { return p.type === 'PAGE' && p !== tempWorkingPage; });
         if (otherPages.length > 0) {
           figma.currentPage = otherPages[0];
           tempWorkingPage.remove();
         }
       }
     }
-    
+
     // Final summary
     let summary = 'Generation complete! ✅ ' + successCount + ' pages created successfully';
     if (errorCount > 0) {
@@ -223,12 +223,12 @@ async function generateFilesFromSheet(apiKey, spreadsheetId, deleteMasterTemplat
     if (deleteMasterTemplates && createdPages.length > 0) {
       summary += ', 🗑️ MASTER TEMPLATES page removed';
     }
-    
+
     figma.ui.postMessage({
       type: 'success',
       message: summary
     });
-    
+
   } catch (error) {
     throw new Error('Failed to generate files: ' + error.message);
   }
@@ -237,9 +237,9 @@ async function generateFilesFromSheet(apiKey, spreadsheetId, deleteMasterTemplat
 async function testGoogleSheetsConnection(apiKey, spreadsheetId) {
   try {
     figma.ui.postMessage({ type: 'status', message: 'Testing Google Sheets connection...' });
-    
+
     const sheetData = await fetchSheetData(apiKey, spreadsheetId);
-    
+
     if (sheetData && sheetData.length > 0) {
       figma.ui.postMessage({
         type: 'success',
@@ -255,19 +255,19 @@ async function testGoogleSheetsConnection(apiKey, spreadsheetId) {
 
 function validateConfiguration() {
   const errors = [];
-  
+
   // Check if API key is still a placeholder
-  if (!CONFIG.GOOGLE_SHEETS_API_KEY || 
-      CONFIG.GOOGLE_SHEETS_API_KEY === 'YOUR_GOOGLE_SHEETS_API_KEY_HERE' ||
-      CONFIG.GOOGLE_SHEETS_API_KEY === 'HERE YOUR GOOGLE_APY_KEY') {
+  if (!CONFIG.GOOGLE_SHEETS_API_KEY ||
+    CONFIG.GOOGLE_SHEETS_API_KEY === 'YOUR_GOOGLE_SHEETS_API_KEY_HERE' ||
+    CONFIG.GOOGLE_SHEETS_API_KEY === 'HERE YOUR GOOGLE_APY_KEY') {
     errors.push('❌ Google Sheets API key not configured. Please update CONFIG.GOOGLE_SHEETS_API_KEY in code.js');
   }
-  
+
   // Check if spreadsheet ID is still a placeholder
   if (!CONFIG.SPREADSHEET_ID || CONFIG.SPREADSHEET_ID === 'YOUR_SPREADSHEET_ID_HERE') {
     errors.push('❌ Spreadsheet ID not configured. Please update CONFIG.SPREADSHEET_ID in code.js');
   }
-  
+
   // Note: API key and Spreadsheet ID can also be provided via UI,
   // so these are warnings rather than hard errors
   if (errors.length > 0) {
@@ -285,19 +285,19 @@ function validateConfiguration() {
 async function loadSourceFileSections() {
   try {
     console.log('🔍 Starting to load source sections...');
-    
+
     // Find sections ONLY in Source_Template or MASTER TEMPLATES page
     const sections = [];
     const seenNames = {}; // Track which section names we've already found
-    
+
     function findTopLevelSections(page) {
       console.log('📄 Scanning page: ' + page.name + ' (children: ' + page.children.length + ')');
-      
+
       // Only look at direct children of the page
       for (let i = 0; i < page.children.length; i++) {
         const node = page.children[i];
         console.log('  - Child ' + i + ': ' + node.type + ' named "' + node.name + '"');
-        
+
         if (node.type === 'SECTION') {
           // Only add if we haven't seen this section name before (avoid duplicates)
           if (!seenNames[node.name]) {
@@ -317,15 +317,15 @@ async function loadSourceFileSections() {
         }
       }
     }
-    
+
     // Search ONLY in Source_Template or MASTER TEMPLATES pages
     let templatePage = null;
     console.log('🔍 Searching for Source_Template or MASTER TEMPLATES page...');
-    
+
     for (let i = 0; i < figma.root.children.length; i++) {
       const page = figma.root.children[i];
       console.log('  Checking page: ' + page.name);
-      
+
       if (page.type === 'PAGE' && (page.name === 'Source_Template' || page.name === 'MASTER TEMPLATES')) {
         templatePage = page;
         console.log('  ✅ Found template page: ' + page.name);
@@ -333,21 +333,21 @@ async function loadSourceFileSections() {
         break; // Stop after finding first template page
       }
     }
-    
+
     // If no template page found, show helpful error
     if (!templatePage) {
       throw new Error('Template page not found. Please create a page named "Source_Template" or "MASTER TEMPLATES" with your template sections.');
     }
-    
+
     // If no sections found in template page, show helpful error
     if (sections.length === 0) {
       throw new Error('No sections found in template page. Please copy the template sections to "Source_Template" or "MASTER TEMPLATES" page first. Required sections: Eats-Storefront-Ring, Partner-Rewards-Hub, Ucraft, Email, LandingPage, Email-Module, Eats-Billboard, Eats-Masthead, Rides-Masthead, Eats-Interstitial, Rides-Interstitial, Ring-NewB, Push');
     }
-    
+
     console.log('✅ Successfully loaded ' + sections.length + ' unique sections');
-    
+
     // Check if there were duplicates detected in Source_Template
-    const totalChildren = templatePage.children.filter(function(node) { return node.type === 'SECTION'; }).length;
+    const totalChildren = templatePage.children.filter(function (node) { return node.type === 'SECTION'; }).length;
     if (totalChildren > sections.length) {
       const duplicateCount = totalChildren - sections.length;
       console.error('🚨🚨🚨 DUPLICATE SECTIONS DETECTED IN SOURCE_TEMPLATE! 🚨🚨🚨');
@@ -356,20 +356,20 @@ async function loadSourceFileSections() {
       console.error('Duplicate sections found: ' + duplicateCount);
       console.error('🪧 ACTION REQUIRED: Clean up your Source_Template page manually!');
       console.error('🪧 Delete all duplicate sections to avoid issues!');
-      
+
       figma.ui.postMessage({
         type: 'warning',
         message: '⚠️ WARNING: Found ' + duplicateCount + ' duplicate sections in Source_Template! Please clean up duplicates manually.'
       });
     }
-    
+
     // Preload all fonts from all sections
     console.log('🔤 Starting font preloading from template sections...');
     await preloadAllFontsFromSections(sections);
     console.log('✅ Font preloading complete');
-    
+
     return sections;
-    
+
   } catch (error) {
     throw new Error('Failed to load sections: ' + error.message);
   }
@@ -381,14 +381,14 @@ async function loadSourceFileSections() {
 
 async function fetchSheetData(apiKey, spreadsheetId) {
   const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + spreadsheetId + '/values/' + CONFIG.RANGE + '?key=' + apiKey;
-  
+
   const response = await fetch(url);
-  
+
   if (!response.ok) {
     const errorData = await response.text();
     throw new Error('Google Sheets API error (' + response.status + '): ' + errorData);
   }
-  
+
   const data = await response.json();
   return data.values || [];
 }
@@ -400,39 +400,39 @@ async function fetchSheetData(apiKey, spreadsheetId) {
 async function processRow(row, rowNumber, sourceSections) {
   // Step 1: Generate page name from columns A, B, C, D
   const pageName = generateFileName(row);
-  
+
   if (!pageName || pageName.trim() === '') {
     throw new Error('Could not generate valid page name from row data');
   }
-  
+
   // Step 2: Identify which sections to include (exclude Comments column)
   const sectionsToInclude = identifySections(row);
-  
+
   if (sectionsToInclude.length === 0) {
     console.log('Row ' + rowNumber + ': No sections marked with "x", skipping');
     return null;
   }
-  
+
   console.log('Row ' + rowNumber + ': Creating page "' + pageName + '" with sections: ' + sectionsToInclude.join(', '));
-  
+
   // Step 3: Create new page in current file
   const newPage = figma.createPage();
   newPage.name = pageName;
-  
+
   // Step 3.5: 🔒 CRITICAL - Switch to the new page IMMEDIATELY to prevent writing to Source_Template
   console.log('🔒 SWITCHING to newly created page: "' + pageName + '"');
   figma.currentPage = newPage;
   console.log('✅ Current page is now: "' + figma.currentPage.name + '"');
-  
+
   // Step 4: Copy sections to the page with improved error handling
   await copySectionsToPage(newPage, sectionsToInclude, sourceSections, rowNumber);
-  
+
   // Step 5: Verify we're still on the correct page
   if (figma.currentPage !== newPage) {
     console.error('⚠️ WARNING: Current page changed unexpectedly! Switching back...');
     figma.currentPage = newPage;
   }
-  
+
   // Return the created page
   return newPage;
 }
@@ -442,51 +442,51 @@ function generateFileName(row) {
   const trigger = (row[COLUMNS.TRIGGER] || '').toString().trim();
   const keyMessage = (row[COLUMNS.KEY_MESSAGE] || '').toString().trim();
   const dates = (row[COLUMNS.DATES] || '').toString().trim();
-  
+
   // Clean and filter parts
   const parts = [account, trigger, keyMessage, dates]
-    .filter(function(part) { return part && part !== '' && part.toLowerCase() !== 'x'; })
-    .map(function(part) { return part.substring(0, CONFIG.MAX_FILENAME_PART_LENGTH); })
-    .map(function(part) { return part.replace(/[^\w\s-]/g, '').trim(); })
-    .map(function(part) { return part.replace(/\s+/g, '_'); }); // Replace spaces with underscores
-  
+    .filter(function (part) { return part && part !== '' && part.toLowerCase() !== 'x'; })
+    .map(function (part) { return part.substring(0, CONFIG.MAX_FILENAME_PART_LENGTH); })
+    .map(function (part) { return part.replace(/[^\w\s-]/g, '').trim(); })
+    .map(function (part) { return part.replace(/\s+/g, '_'); }); // Replace spaces with underscores
+
   if (parts.length === 0) {
     return 'Generated_Page_' + Date.now();
   }
-  
+
   // Join with underscores
   let fileName = parts.join('_');
-  
+
   if (CONFIG.ADD_TIMESTAMP) {
     const timestamp = new Date().toISOString().slice(0, 10);
     fileName += '_' + timestamp;
   }
-  
+
   return fileName;
 }
 
 function identifySections(row) {
   const sections = [];
-  
+
   console.log('\n🔍 IDENTIFYING SECTIONS FROM ROW:');
   console.log('  Row length: ' + row.length);
   console.log('  Row data: ' + JSON.stringify(row));
-  
-  Object.entries(SECTION_NAMES).forEach(function(entry) {
+
+  Object.entries(SECTION_NAMES).forEach(function (entry) {
     const columnIndex = entry[0];
     const sectionName = entry[1];
     const cellValue = row[parseInt(columnIndex)];
-    
+
     console.log('  Col ' + columnIndex + ' (' + sectionName + '): "' + cellValue + '"');
-    
+
     if (cellValue && cellValue.toString().toLowerCase().trim() === 'x') {
       sections.push(sectionName);
       console.log('    ✅ ADDED: ' + sectionName);
     }
   });
-  
+
   console.log('  📦 Final sections list: ' + JSON.stringify(sections));
-  
+
   return sections;
 }
 
@@ -498,13 +498,13 @@ async function preloadAllFontsFromSections(sections) {
   const uniqueFonts = {}; // Track unique font family+style combinations
   let successCount = 0;
   let warningCount = 0;
-  
+
   // Step 1: Collect all unique fonts from all sections
   console.log('  🔍 Scanning ' + sections.length + ' sections for fonts...');
   for (let i = 0; i < sections.length; i++) {
     const section = sections[i];
-    const textNodes = section.node.findAll(function(node) { return node.type === 'TEXT'; });
-    
+    const textNodes = section.node.findAll(function (node) { return node.type === 'TEXT'; });
+
     for (let j = 0; j < textNodes.length; j++) {
       const textNode = textNodes[j];
       const fontKey = textNode.fontName.family + '|' + textNode.fontName.style;
@@ -513,16 +513,16 @@ async function preloadAllFontsFromSections(sections) {
       }
     }
   }
-  
+
   const fontList = Object.values(uniqueFonts);
   console.log('  📝 Found ' + fontList.length + ' unique fonts to load');
-  
+
   // Send status to UI
-  figma.ui.postMessage({ 
-    type: 'status', 
+  figma.ui.postMessage({
+    type: 'status',
     message: 'Preloading ' + fontList.length + ' fonts from templates...'
   });
-  
+
   // Step 2: Load all unique fonts
   for (let i = 0; i < fontList.length; i++) {
     const font = fontList[i];
@@ -535,26 +535,26 @@ async function preloadAllFontsFromSections(sections) {
       warningCount++;
     }
   }
-  
+
   // Summary message
   let summary = '✅ Preloaded ' + successCount + ' fonts successfully';
   if (warningCount > 0) {
     summary += ' (' + warningCount + ' warnings)';
   }
   console.log('  ' + summary);
-  
-  figma.ui.postMessage({ 
-    type: 'status', 
+
+  figma.ui.postMessage({
+    type: 'status',
     message: summary
   });
 }
 
 async function loadFontsForSection(section) {
   console.log('🔤 Loading fonts for section: ' + section.name);
-  
+
   // Find all text nodes in the section
-  const textNodes = section.findAll(function(node) { return node.type === 'TEXT'; });
-  
+  const textNodes = section.findAll(function (node) { return node.type === 'TEXT'; });
+
   // Load fonts for each text node
   for (let i = 0; i < textNodes.length; i++) {
     const textNode = textNodes[i];
@@ -572,134 +572,227 @@ async function loadFontsForSection(section) {
 // =============================================================================
 
 async function copySectionsToPage(targetPage, sectionNames, sourceSections, rowNumber) {
-  console.log('\n🔷🔷🔷 ROW ' + rowNumber + ' - STARTING COPY 🔷🔷🔷');
-  console.log('📋 Sections requested from spreadsheet: ' + JSON.stringify(sectionNames));
-  console.log('📦 Available source sections: ' + sourceSections.map(function(s) { return s.name; }).join(', '));
-  
-  // 🚨 CRITICAL: Verify we're NOT on Source_Template or MASTER TEMPLATES page
-  if (figma.currentPage.name === 'Source_Template' || figma.currentPage.name === 'MASTER TEMPLATES') {
-    console.error('❌❌❌ DANGER: Currently on template page "' + figma.currentPage.name + '"!');
-    console.error('🔀 Switching to target page: "' + targetPage.name + '"');
-  }
-  
-  figma.ui.postMessage({ 
-    type: 'status', 
-    message: 'Copying ' + sectionNames.length + ' sections to "' + targetPage.name + '"...'
-  });
-  
-  // 🔒 LOCK: Set current page to target BEFORE any operations
+  console.log('\n=== ROW ' + rowNumber + ' START ===');
+  console.log('Target page: ' + targetPage.name);
+  console.log('Sections to copy: ' + sectionNames.join(', '));
+
+  // Force page switch
   figma.currentPage = targetPage;
-  console.log('✅ Current page locked to: "' + figma.currentPage.name + '"');
-  
+  console.log('Current page set to: ' + figma.currentPage.name);
+
+  // Track successful and failed sections
+  const successfulSections = [];
+  const failedSections = [];
+  const permanentFailures = [];
+
+  // Position tracking
   let currentX = CONFIG.PAGE_MARGIN;
   let currentY = CONFIG.PAGE_MARGIN;
   let rowHeight = 0;
-  let sectionsInCurrentRow = 0;
-  
+
+  // =============================================================================
+  // PASS 1: Initial copy attempt for all sections
+  // =============================================================================
+  console.log('\n=== PASS 1: Initial Copy Attempt ===');
+  console.log('Attempting to copy ' + sectionNames.length + ' sections...\n');
+
   for (let i = 0; i < sectionNames.length; i++) {
     const sectionName = sectionNames[i];
-    
-    console.log('\n  ➡️ Processing section ' + (i + 1) + '/' + sectionNames.length + ': "' + sectionName + '"');
-    
-    try {
-      const sourceSection = sourceSections.find(function(section) {
-        return section.name === sectionName;
+
+    console.log('--- Section ' + (i + 1) + '/' + sectionNames.length + ': ' + sectionName + ' ---');
+
+    // Find section in source
+    const sourceSection = sourceSections.find(function (section) {
+      return section.name === sectionName;
+    });
+
+    if (!sourceSection) {
+      console.log('⚠️ SKIP: Not found in source');
+      permanentFailures.push({
+        name: sectionName,
+        reason: 'Section not found in source file'
       });
-      
-      console.log('  🔍 Looking for section "' + sectionName + '" in source sections...');
-      
-      if (!sourceSection) {
-        console.error('  ❌ NOT FOUND in source sections!');
-        await createPlaceholderSection(targetPage, sectionName, currentX, currentY);
-        
-        // Update position for next section
-        const placeholderWidth = 300;
-        const placeholderHeight = 200;
-        rowHeight = Math.max(rowHeight, placeholderHeight);
-        currentX += placeholderWidth + CONFIG.SECTION_SPACING;
-        sectionsInCurrentRow++;
-        
-        if (sectionsInCurrentRow >= CONFIG.SECTIONS_PER_ROW) {
-          currentX = CONFIG.PAGE_MARGIN;
-          currentY += rowHeight + CONFIG.SECTION_SPACING;
-          rowHeight = 0;
-          sectionsInCurrentRow = 0;
-        }
-        
-        continue;
-      }
-      
-      console.log('  ✅ FOUND: "' + sourceSection.name + '" (width: ' + sourceSection.width + ', height: ' + sourceSection.height + ')');
-      
-      // Clone the section (fonts already preloaded)
-      console.log('  📋 Cloning section...');
+      continue;
+    }
+
+    // Ensure we're on the correct page before cloning
+    if (figma.currentPage !== targetPage) {
+      console.warn('⚠️ Page drift detected! Switching back to target page...');
+      figma.currentPage = targetPage;
+    }
+
+    console.log('📋 Attempting to clone \"' + sectionName + '\"...');
+
+    try {
+      // Clone the section
       const clonedSection = sourceSection.node.clone();
+
+      // Verify page didn't change after clone
+      if (figma.currentPage !== targetPage) {
+        console.error('❌ Clone changed current page! Forcing switch back...');
+        figma.currentPage = targetPage;
+      }
+
+      // Set position
       clonedSection.x = currentX;
       clonedSection.y = currentY;
-      
-      // Add to target page - DIRECTLY append to targetPage object, don't rely on figma.currentPage
-      console.log('  ➕ Appending to page "' + targetPage.name + '" at position (' + currentX + ', ' + currentY + ')...');
+
+      // Append to target page
       targetPage.appendChild(clonedSection);
-      
-      console.log('  ✅ Successfully copied section: ' + sectionName);
-      
+
+      console.log('✅ SUCCESS: \"' + sectionName + '\" copied');
+
+      // Track success
+      successfulSections.push({
+        name: sectionName,
+        width: sourceSection.width,
+        height: sourceSection.height
+      });
+
       // Update position for next section
       rowHeight = Math.max(rowHeight, sourceSection.height);
       currentX += sourceSection.width + CONFIG.SECTION_SPACING;
-      sectionsInCurrentRow++;
-      
-      // Check if we need to start a new row
-      if (sectionsInCurrentRow >= CONFIG.SECTIONS_PER_ROW) {
-        currentX = CONFIG.PAGE_MARGIN;
-        currentY += rowHeight + CONFIG.SECTION_SPACING;
-        rowHeight = 0;
-        sectionsInCurrentRow = 0;
-      }
-      
+
     } catch (error) {
-      console.error('  ❌❌❌ EXCEPTION while copying "' + sectionName + '": ' + error.message);
-      console.error('  Stack: ' + error.stack);
-      
-      // ⚠️ CRITICAL FIX: Still advance position even when section fails!
-      // This prevents subsequent sections from overlapping at the same position
-      if (sourceSection) {
-        // Use the source section's dimensions to advance position
-        rowHeight = Math.max(rowHeight, sourceSection.height);
-        currentX += sourceSection.width + CONFIG.SECTION_SPACING;
-        sectionsInCurrentRow++;
-        
-        console.warn('  ➡️ Skipping failed section but advancing position to prevent overlap');
-        console.warn('  📍 Next section will be at X: ' + currentX);
-        
-        // Check if we need to start a new row
-        if (sectionsInCurrentRow >= CONFIG.SECTIONS_PER_ROW) {
-          currentX = CONFIG.PAGE_MARGIN;
-          currentY += rowHeight + CONFIG.SECTION_SPACING;
-          rowHeight = 0;
-          sectionsInCurrentRow = 0;
-        }
-      } else {
-        // If we don't have dimensions, use a default size to advance
-        const defaultWidth = 600;
-        const defaultHeight = 400;
-        rowHeight = Math.max(rowHeight, defaultHeight);
-        currentX += defaultWidth + CONFIG.SECTION_SPACING;
-        sectionsInCurrentRow++;
-        
-        console.warn('  ➡️ Using default dimensions to advance position');
-        
-        if (sectionsInCurrentRow >= CONFIG.SECTIONS_PER_ROW) {
-          currentX = CONFIG.PAGE_MARGIN;
-          currentY += rowHeight + CONFIG.SECTION_SPACING;
-          rowHeight = 0;
-          sectionsInCurrentRow = 0;
-        }
-      }
+      console.warn('⚠️ FAILED (will retry): \"' + sectionName + '\"');
+      console.warn('   Error: ' + error.message);
+
+      // Track failure for retry
+      failedSections.push({
+        name: sectionName,
+        sourceSection: sourceSection,
+        error: error.message
+      });
+
+      // Reserve space to maintain layout consistency
+      currentX += sourceSection.width + CONFIG.SECTION_SPACING;
     }
   }
-  
-  console.log('\n🔷 ROW ' + rowNumber + ' - COPY COMPLETE 🔷\n');
+
+  console.log('\n--- Pass 1 Summary ---');
+  console.log('✅ Successful: ' + successfulSections.length);
+  console.log('⚠️ Failed (will retry): ' + failedSections.length);
+  console.log('❌ Not found: ' + permanentFailures.length);
+
+  // =============================================================================
+  // PASS 2: Retry failed sections
+  // =============================================================================
+  if (failedSections.length > 0) {
+    console.log('\n=== PASS 2: Retry Failed Sections ===');
+    console.log('Retrying ' + failedSections.length + ' failed sections...\n');
+
+    // Send UI notification about retry
+    figma.ui.postMessage({
+      type: 'status',
+      message: '🔄 Retrying ' + failedSections.length + ' failed sections for row ' + rowNumber + '...'
+    });
+
+    // Reset position to start of row for retries
+    currentX = CONFIG.PAGE_MARGIN;
+
+    for (let i = 0; i < failedSections.length; i++) {
+      const failedItem = failedSections[i];
+      const sectionName = failedItem.name;
+      const sourceSection = failedItem.sourceSection;
+
+      console.log('--- Retry ' + (i + 1) + '/' + failedSections.length + ': ' + sectionName + ' ---');
+
+      // Calculate position (skip already successful sections)
+      let retryX = CONFIG.PAGE_MARGIN;
+      for (let j = 0; j < sectionNames.length; j++) {
+        if (sectionNames[j] === sectionName) {
+          break;
+        }
+        const prevSection = sourceSections.find(function (s) { return s.name === sectionNames[j]; });
+        if (prevSection) {
+          retryX += prevSection.width + CONFIG.SECTION_SPACING;
+        }
+      }
+
+      // Ensure we're on the correct page
+      if (figma.currentPage !== targetPage) {
+        console.warn('⚠️ Page drift detected! Switching back to target page...');
+        figma.currentPage = targetPage;
+      }
+
+      console.log('📋 Retry attempt for \"' + sectionName + '\"...');
+
+      try {
+        // Clone the section
+        const clonedSection = sourceSection.node.clone();
+
+        // Verify page didn't change
+        if (figma.currentPage !== targetPage) {
+          console.error('❌ Clone changed current page! Forcing switch back...');
+          figma.currentPage = targetPage;
+        }
+
+        // Set position
+        clonedSection.x = retryX;
+        clonedSection.y = currentY;
+
+        // Append to target page
+        targetPage.appendChild(clonedSection);
+
+        console.log('✅ SUCCESS on retry: \"' + sectionName + '\" copied');
+
+        // Track success
+        successfulSections.push({
+          name: sectionName,
+          width: sourceSection.width,
+          height: sourceSection.height
+        });
+
+        // Update row height
+        rowHeight = Math.max(rowHeight, sourceSection.height);
+
+        // Send success notification
+        figma.ui.postMessage({
+          type: 'status',
+          message: '✅ Retry successful: \"' + sectionName + '\"'
+        });
+
+      } catch (retryError) {
+        console.error('❌ RETRY FAILED: \"' + sectionName + '\"');
+        console.error('   Error: ' + retryError.message);
+
+        // Track permanent failure
+        permanentFailures.push({
+          name: sectionName,
+          reason: 'Failed after retry: ' + retryError.message
+        });
+
+        // Send warning notification
+        figma.ui.postMessage({
+          type: 'warning',
+          message: '⚠️ Permanently skipped \"' + sectionName + '\" after retry failed'
+        });
+      }
+    }
+
+    console.log('\n--- Pass 2 Summary ---');
+    console.log('✅ Successful retries: ' + (successfulSections.length - (sectionNames.length - failedSections.length - permanentFailures.length)));
+    console.log('❌ Permanent failures: ' + permanentFailures.length);
+  }
+
+  // =============================================================================
+  // Final Summary
+  // =============================================================================
+  console.log('\n=== ROW ' + rowNumber + ' COMPLETE ===');
+  console.log('📊 Final Summary:');
+  console.log('   ✅ Total successful: ' + successfulSections.length + '/' + sectionNames.length);
+  console.log('   ❌ Total failed: ' + permanentFailures.length + '/' + sectionNames.length);
+
+  if (permanentFailures.length > 0) {
+    console.log('\n⚠️ Permanently failed sections:');
+    permanentFailures.forEach(function (failure) {
+      console.log('   - ' + failure.name + ': ' + failure.reason);
+    });
+  }
+
+  console.log(''); // Empty line for readability
 }
+
 
 // =============================================================================
 // PLACEHOLDER CREATION
@@ -712,21 +805,21 @@ async function createPlaceholderSection(targetPage, sectionName, x, y) {
   frame.x = x;
   frame.y = y;
   frame.resize(300, 200);
-  frame.fills = [{ 
-    type: 'SOLID', 
-    color: { r: 0.95, g: 0.95, b: 0.95 } 
+  frame.fills = [{
+    type: 'SOLID',
+    color: { r: 0.95, g: 0.95, b: 0.95 }
   }];
-  frame.strokes = [{ 
-    type: 'SOLID', 
-    color: { r: 0.7, g: 0.7, b: 0.7 } 
+  frame.strokes = [{
+    type: 'SOLID',
+    color: { r: 0.7, g: 0.7, b: 0.7 }
   }];
   frame.strokeWeight = 2;
   frame.dashPattern = [5, 5];
-  
+
   // Add section name text
   await addTextToFrame(frame, sectionName, 10, 10, 16);
   await addTextToFrame(frame, '(Section not found in source file)', 10, 40, 12, { r: 0.6, g: 0.6, b: 0.6 });
-  
+
   targetPage.appendChild(frame);
 }
 
@@ -736,19 +829,19 @@ async function createErrorPlaceholder(targetPage, sectionName, x, y, errorMessag
   frame.x = x;
   frame.y = y;
   frame.resize(300, 200);
-  frame.fills = [{ 
-    type: 'SOLID', 
-    color: { r: 1, g: 0.9, b: 0.9 } 
+  frame.fills = [{
+    type: 'SOLID',
+    color: { r: 1, g: 0.9, b: 0.9 }
   }];
-  frame.strokes = [{ 
-    type: 'SOLID', 
-    color: { r: 0.8, g: 0.2, b: 0.2 } 
+  frame.strokes = [{
+    type: 'SOLID',
+    color: { r: 0.8, g: 0.2, b: 0.2 }
   }];
   frame.strokeWeight = 2;
-  
+
   await addTextToFrame(frame, sectionName, 10, 10, 16);
   await addTextToFrame(frame, '❌ Error: ' + errorMessage.substring(0, 50), 10, 40, 10, { r: 0.8, g: 0.2, b: 0.2 });
-  
+
   targetPage.appendChild(frame);
 }
 
@@ -758,16 +851,16 @@ async function createErrorPlaceholder(targetPage, sectionName, x, y, errorMessag
 
 async function deleteMasterTemplatesPage() {
   try {
-    figma.ui.postMessage({ 
-      type: 'status', 
+    figma.ui.postMessage({
+      type: 'status',
       message: 'Looking for MASTER TEMPLATES page...'
     });
-    
+
     // Find the MASTER TEMPLATES page
-    const masterTemplatesPage = figma.root.children.find(function(page) {
+    const masterTemplatesPage = figma.root.children.find(function (page) {
       return page.type === 'PAGE' && page.name === CONFIG.MASTER_TEMPLATES_PAGE_NAME;
     });
-    
+
     if (!masterTemplatesPage) {
       figma.ui.postMessage({
         type: 'error',
@@ -775,14 +868,14 @@ async function deleteMasterTemplatesPage() {
       });
       return;
     }
-    
+
     // Safety check: Make sure we're not on the MASTER TEMPLATES page
     if (figma.currentPage === masterTemplatesPage) {
       // Switch to a different page first
-      const otherPage = figma.root.children.find(function(page) {
+      const otherPage = figma.root.children.find(function (page) {
         return page.type === 'PAGE' && page !== masterTemplatesPage;
       });
-      
+
       if (otherPage) {
         figma.currentPage = otherPage;
         console.log('Switched to page: ' + otherPage.name + ' before deleting MASTER TEMPLATES');
@@ -794,21 +887,21 @@ async function deleteMasterTemplatesPage() {
         return;
       }
     }
-    
+
     // Delete the MASTER TEMPLATES page
     masterTemplatesPage.remove();
-    
-    figma.ui.postMessage({ 
-      type: 'success', 
+
+    figma.ui.postMessage({
+      type: 'success',
       message: '✅ MASTER TEMPLATES page deleted successfully'
     });
-    
+
     console.log('✅ Successfully deleted MASTER TEMPLATES page');
-    
+
   } catch (error) {
     console.error('❌ Failed to delete MASTER TEMPLATES page:', error);
-    figma.ui.postMessage({ 
-      type: 'error', 
+    figma.ui.postMessage({
+      type: 'error',
       message: 'Failed to delete MASTER TEMPLATES page: ' + error.message
     });
   }
@@ -821,7 +914,7 @@ async function deleteMasterTemplatesPage() {
 async function addTextToFrame(frame, text, x, y, fontSize, color) {
   fontSize = fontSize || 16;
   color = color || { r: 0, g: 0, b: 0 };
-  
+
   try {
     // Load font (try to load a common font, fallback to default)
     try {
@@ -833,14 +926,14 @@ async function addTextToFrame(frame, text, x, y, fontSize, color) {
         // Use default font
       }
     }
-    
+
     const textNode = figma.createText();
     textNode.characters = text;
     textNode.x = frame.x + x;
     textNode.y = frame.y + y;
     textNode.fontSize = fontSize;
     textNode.fills = [{ type: 'SOLID', color: color }];
-    
+
     frame.appendChild(textNode);
     return textNode;
   } catch (error) {
@@ -856,7 +949,7 @@ async function cleanupMasterTemplatesPage(fallbackPage) {
   try {
     // Find the MASTER TEMPLATES page
     let masterTemplatesPage = null;
-    
+
     for (let i = 0; i < figma.root.children.length; i++) {
       const page = figma.root.children[i];
       if (page.type === 'PAGE' && page.name === 'MASTER TEMPLATES') {
@@ -864,29 +957,29 @@ async function cleanupMasterTemplatesPage(fallbackPage) {
         break;
       }
     }
-    
+
     if (masterTemplatesPage) {
       // Switch to a different page before deleting (can't delete current page)
       if (figma.currentPage === masterTemplatesPage) {
         figma.currentPage = fallbackPage;
       }
-      
+
       // Remove the MASTER TEMPLATES page
       masterTemplatesPage.remove();
-      
+
       console.log('✅ Successfully removed MASTER TEMPLATES page');
-      figma.ui.postMessage({ 
-        type: 'status', 
+      figma.ui.postMessage({
+        type: 'status',
         message: 'Removed MASTER TEMPLATES page'
       });
     } else {
       console.log('ℹ️ No MASTER TEMPLATES page found to remove');
     }
-    
+
   } catch (error) {
     console.error('❌ Failed to cleanup MASTER TEMPLATES page:', error);
-    figma.ui.postMessage({ 
-      type: 'warning', 
+    figma.ui.postMessage({
+      type: 'warning',
       message: 'Could not remove MASTER TEMPLATES page: ' + error.message
     });
   }

@@ -1,0 +1,132 @@
+The filesystem appears to have issues. Rafael, please manually apply this fix to code.js:
+
+FIND THIS CODE (around line 631):
+
+    console.log('  ✅ FOUND: "' + sourceSection.name + '" (width: ' + sourceSection.width + ', height: ' + sourceSection.height + ')');
+    
+    // Clone the section with font error handling
+    console.log('  📋 Attempting to clone section...');
+    
+    let clonedSection = null;
+    let cloneSuccess = false;
+    
+    try {
+      clonedSection = sourceSection.node.clone();
+      clonedSection.x = currentX;
+      clonedSection.y = currentY;
+      cloneSuccess = true;
+      console.log('  ✅ Clone created successfully');
+    } catch (cloneError) {
+      console.error('  ❌ Clone failed: ' + cloneError.message);
+      console.error('  🔍 Error type: Font loading issue detected');
+      cloneSuccess = false;
+    }
+    
+    if (cloneSuccess && clonedSection) {
+      try {
+        // Add to target page - DIRECTLY append to targetPage object
+        console.log('  ➕ Appending to page "' + targetPage.name + '" at position (' + currentX + ', ' + currentY + ')...');
+        targetPage.appendChild(clonedSection);
+        console.log('  ✅ Successfully copied section: ' + sectionName);
+      } catch (appendError) {
+        console.error('  ❌ Append failed: ' + appendError.message);
+        cloneSuccess = false;
+      }
+    }
+    
+    if (!cloneSuccess) {
+      // Section failed - log it clearly and skip it
+      console.warn('  ⚠️⚠️⚠️ SKIPPING SECTION "' + sectionName + '" due to errors (likely missing fonts)');
+      console.warn('  💡 This section will be skipped but space will be reserved to prevent overlaps');
+      figma.ui.postMessage({ 
+        type: 'warning', 
+        message: '⚠️ Skipped "' + sectionName + '" (font loading issue)'
+      });
+    }
+
+REPLACE WITH:
+
+    console.log('  ✅ FOUND: "' + sourceSection.name + '" (width: ' + sourceSection.width + ', height: ' + sourceSection.height + ')');
+    
+    // 🔒 DEFENSIVE CHECK: Ensure we're on target page before cloning
+    if (figma.currentPage !== targetPage) {
+      console.error('  ⚠️ Page drift detected! Switching back to target page...');
+      figma.currentPage = targetPage;
+    }
+    
+    // Clone the section with font error handling
+    console.log('  📋 Attempting to clone section...');
+    console.log('  🔍 Current page before clone: "' + figma.currentPage.name + '"');
+    
+    let clonedSection = null;
+    let cloneSuccess = false;
+    
+    try {
+      clonedSection = sourceSection.node.clone();
+      
+      // 🔒 CRITICAL: Verify current page didn't change after clone
+      if (figma.currentPage !== targetPage) {
+        console.error('  ❌ Clone changed current page! This should never happen!');
+        console.error('  🔀 Forcing switch back to: "' + targetPage.name + '"');
+        figma.currentPage = targetPage;
+      }
+      
+      // Set position and add to target page
+      clonedSection.x = currentX;
+      clonedSection.y = currentY;
+      
+      // 🔒 DIRECTLY append to targetPage object (not figma.currentPage)
+      console.log('  ➕ Appending to target page "' + targetPage.name + '" at position (' + currentX + ', ' + currentY + ')...');
+      targetPage.appendChild(clonedSection);
+      
+      cloneSuccess = true;
+      console.log('  ✅ Clone created and appended successfully');
+      
+    } catch (cloneError) {
+      console.error('  ❌ Clone/Append failed: ' + cloneError.message);
+      console.error('  📚 Stack trace: ' + cloneError.stack);
+      
+      // 🚨 CRITICAL: Check if partial clone exists on wrong page
+      if (clonedSection) {
+        console.error('  🗑️ Removing partial clone that may have been created...');
+        try {
+          clonedSection.remove();
+        } catch (removeError) {
+          console.error('  ⚠️ Could not remove partial clone: ' + removeError.message);
+        }
+      }
+      
+      cloneSuccess = false;
+      
+      // 🛑 STOP PROCESSING THIS ROW - don't continue with other sections
+      // This prevents "remaining sections canceled" issue
+      console.error('  🛑 STOPPING ROW PROCESSING due to critical clone failure');
+      console.error('  ❌ Remaining sections in this row will not be processed');
+      
+      figma.ui.postMessage({ 
+        type: 'error', 
+        message: '❌ Row ' + rowNumber + ' FAILED at section "' + sectionName + '": ' + cloneError.message
+      });
+      
+      // Throw error to stop processing this row
+      throw new Error('Section "' + sectionName + '" clone failed: ' + cloneError.message);
+    }
+    
+    if (!cloneSuccess) {
+      // This should never be reached due to throw above, but keeping as safety
+      console.warn('  ⚠️⚠️⚠️ SKIPPING SECTION "' + sectionName + '" due to errors (likely missing fonts)');
+      console.warn('  💡 This section will be skipped but space will be reserved to prevent overlaps');
+      figma.ui.postMessage({ 
+        type: 'warning', 
+        message: '⚠️ Skipped "' + sectionName + '" (font loading issue)'
+      });
+    }
+
+KEY CHANGES:
+1. Page verification BEFORE cloning
+2. Page verification AFTER cloning
+3. Attempt to remove partial clones if error occurs
+4. THROW ERROR to stop row processing (prevents other sections from running)
+5. This matches Scenario A - when Rides/Eats-Masthead fails, the ENTIRE ROW stops
+
+This will prevent duplicates on Source_Template AND stop the row when critical errors occur.
