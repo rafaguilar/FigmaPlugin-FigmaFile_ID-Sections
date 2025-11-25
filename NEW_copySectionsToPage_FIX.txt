@@ -1,0 +1,237 @@
+// NEW copySectionsToPage FUNCTION - SOURCE_TEMPLATE CORRUPTION FIX
+// Replace the existing copySectionsToPage function in code.js with this version
+
+async function copySectionsToPage(targetPage, sectionNames, sourceSections, rowNumber) {
+  console.log('\n=== ROW ' + rowNumber + ' START ===');
+  console.log('Target page: ' + targetPage.name);
+  console.log('Sections to copy: ' + sectionNames.join(', '));
+
+  // 🔒 CRITICAL: Lock to target page and get Source_Template reference for safety checks
+  figma.currentPage = targetPage;
+  const sourceTemplatePage = figma.root.children.find(function (p) {
+    return p.type === 'PAGE' && (p.name === 'Source_Template' || p.name === 'MASTER TEMPLATES');
+  });
+  console.log('✅ Locked to target page: ' + figma.currentPage.name);
+  if (sourceTemplatePage) {
+    console.log('🛡️ Source_Template protection active: ' + sourceTemplatePage.name);
+  }
+
+  // Track sections and state
+  const successfulSections = [];
+  const permanentFailures = [];
+  let currentX = CONFIG.PAGE_MARGIN;
+  let currentY = CONFIG.PAGE_MARGIN;
+  let rowHeight = 0;
+
+  // =============================================================================
+  // SINGLE PASS: Clone with aggressive safety checks
+  // =============================================================================
+  console.log('\n=== CLONING SECTIONS WITH SOURCE_TEMPLATE PROTECTION ===\n');
+
+  for (let i = 0; i < sectionNames.length; i++) {
+    const sectionName = sectionNames[i];
+    console.log('--- Section ' + (i + 1) + '/' + sectionNames.length + ': ' + sectionName + ' ---');
+
+    // Find section in source
+    const sourceSection = sourceSections.find(function (s) { return s.name === sectionName; });
+    
+    if (!sourceSection) {
+      console.log('⚠️ SKIP: Not found in source');
+      permanentFailures.push({
+        name: sectionName,
+        reason: 'Section not found in source file'
+      });
+      continue;
+    }
+
+    // 🔒 PRE-CLONE SAFETY: Verify page state
+    if (figma.currentPage !== targetPage) {
+      console.error('🚨 PRE-CLONE: Wrong page detected! Current: ' + figma.currentPage.name);
+      figma.currentPage = targetPage;
+      console.log('✅ Forced back to: ' + targetPage.name);
+    }
+
+    console.log('📋 Cloning \"' + sectionName + '\"...');
+    console.log('   Before: currentPage = ' + figma.currentPage.name);
+
+    let clonedSection = null;
+    let cloneSuccess = false;
+
+    try {
+      // 🎯 CLONE OPERATION
+      clonedSection = sourceSection.node.clone();
+      console.log('   Clone created, checking parent...');
+
+      // 🔒 IMMEDIATE POST-CLONE SAFETY CHECKS
+      
+      // Check 1: Did current page change?
+      if (figma.currentPage !== targetPage) {
+        console.error('🚨 ALERT: Clone changed currentPage to: ' + figma.currentPage.name);
+        figma.currentPage = targetPage;
+        console.log('✅ Forced back to: ' + targetPage.name);
+      }
+
+      // Check 2: Where is the clone's parent?
+      if (clonedSection.parent) {
+        console.log('   Clone parent: ' + clonedSection.parent.name);
+        
+        // 🚨 CRITICAL CHECK: Is clone on Source_Template?
+        if (sourceTemplatePage && clonedSection.parent === sourceTemplatePage) {
+          console.error('🚨🚨🚨 CORRUPTION DETECTED! Clone created on Source_Template!');
+          console.error('   Removing corrupted clone from Source_Template...');
+          clonedSection.remove();
+          clonedSection = null;
+          throw new Error('Clone was created on Source_Template instead of target page');
+        }
+        
+        // Clone shouldn't have a parent yet (we haven't appended)
+        if (clonedSection.parent !== targetPage) {
+          console.warn('⚠️ Clone has unexpected parent: ' + clonedSection.parent.name);
+        }
+      } else {
+        console.log('   Clone parent: NONE (expected)');
+      }
+
+      // 🔒 Force page again before positioning
+      if (figma.currentPage !== targetPage) {
+        console.warn('⚠️ Page drifted before positioning, forcing back...');
+        figma.currentPage = targetPage;
+      }
+
+      // Set position
+      clonedSection.x = currentX;
+      clonedSection.y = currentY;
+
+      // 🔒 Final safety check before appendChild
+      if (figma.currentPage !== targetPage) {
+        console.error('🚨 Page wrong before appendChild! Forcing back...');
+        figma.currentPage = targetPage;
+      }
+
+      // Append to target page
+      targetPage.appendChild(clonedSection);
+
+      // ✅ VERIFY SUCCESS
+      if (clonedSection.parent === targetPage) {
+        console.log('✅ SUCCESS: \"' + sectionName + '\" on ' + targetPage.name);
+        cloneSuccess = true;
+        
+        successfulSections.push({
+          name: sectionName,
+          width: sourceSection.width,
+          height: sourceSection.height
+        });
+
+        // Update position
+        rowHeight = Math.max(rowHeight, sourceSection.height);
+        currentX += sourceSection.width + CONFIG.SECTION_SPACING;
+      } else {
+        throw new Error('Clone parent verification failed after appendChild');
+      }
+
+    } catch (error) {
+      console.error('❌ CLONE FAILED: \"' + sectionName + '\"');
+      console.error('   Error: ' + error.message);
+
+      // 🧹 CLEANUP: Remove any orphaned clones
+      if (clonedSection) {
+        try {
+          // Check if clone ended up on Source_Template
+          if (sourceTemplatePage && clonedSection.parent === sourceTemplatePage) {
+            console.error('🧹 Removing orphaned clone from Source_Template...');
+            clonedSection.remove();
+          } else if (clonedSection.parent) {
+            console.log('🧹 Removing orphaned clone from: ' + clonedSection.parent.name);
+            clonedSection.remove();
+          }
+        } catch (cleanupError) {
+          console.error('⚠️ Cleanup failed: ' + cleanupError.message);
+        }
+      }
+
+      // 🛑 STOP PROCESSING FOR CRITICAL SECTIONS
+      const criticalSections = ['Rides-Masthead', 'Eats-Masthead'];
+      if (criticalSections.indexOf(sectionName) !== -1) {
+        console.error('🛑 CRITICAL SECTION FAILED: ' + sectionName);
+        console.error('🛑 STOPPING ROW PROCESSING - This is expected behavior');
+        
+        // Throw error to stop row processing (Scenario A)
+        throw new Error('Critical section "' + sectionName + '" failed to clone. Row processing stopped. Error: ' + error.message);
+      }
+
+      // Non-critical section failure - track and continue
+      permanentFailures.push({
+        name: sectionName,
+        reason: error.message
+      });
+
+      // Reserve space to maintain layout
+      currentX += sourceSection.width + CONFIG.SECTION_SPACING;
+    }
+
+    // 🔒 POST-SECTION SAFETY: Always verify we're still on target page
+    if (figma.currentPage !== targetPage) {
+      console.error('🚨 POST-SECTION: Page changed to ' + figma.currentPage.name + ', forcing back...');
+      figma.currentPage = targetPage;
+    }
+  }
+
+  // =============================================================================
+  // 🧹 FINAL CLEANUP: Check for any Source_Template corruption
+  // =============================================================================
+  if (sourceTemplatePage) {
+    console.log('\n🔍 Verifying Source_Template integrity...');
+    const sourceTemplateChildren = sourceTemplatePage.children.filter(function (node) {
+      return node.type === 'SECTION';
+    });
+    
+    // Count sections - if more than expected, we have duplicates
+    const uniqueSectionNames = {};
+    const duplicates = [];
+    
+    for (let i = 0; i < sourceTemplateChildren.length; i++) {
+      const section = sourceTemplateChildren[i];
+      if (uniqueSectionNames[section.name]) {
+        duplicates.push(section);
+      } else {
+        uniqueSectionNames[section.name] = true;
+      }
+    }
+    
+    if (duplicates.length > 0) {
+      console.error('🚨🚨🚨 DUPLICATES FOUND IN SOURCE_TEMPLATE!');
+      console.error('   Duplicate count: ' + duplicates.length);
+      console.error('   Attempting to remove duplicates...');
+      
+      for (let i = 0; i < duplicates.length; i++) {
+        try {
+          console.log('   Removing duplicate: ' + duplicates[i].name);
+          duplicates[i].remove();
+        } catch (removeError) {
+          console.error('   Failed to remove duplicate: ' + removeError.message);
+        }
+      }
+      
+      console.log('✅ Duplicate cleanup attempted');
+    } else {
+      console.log('✅ Source_Template clean - no duplicates found');
+    }
+  }
+
+  // =============================================================================
+  // Final Summary
+  // =============================================================================
+  console.log('\n=== ROW ' + rowNumber + ' COMPLETE ===');
+  console.log('📊 Final Summary:');
+  console.log('   ✅ Successful: ' + successfulSections.length + '/' + sectionNames.length);
+  console.log('   ❌ Failed: ' + permanentFailures.length + '/' + sectionNames.length);
+
+  if (permanentFailures.length > 0) {
+    console.log('\n⚠️ Failed sections:');
+    permanentFailures.forEach(function (failure) {
+      console.log('   - ' + failure.name + ': ' + failure.reason);
+    });
+  }
+
+  console.log('');
+}

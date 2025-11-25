@@ -1,0 +1,95 @@
+================================================================================
+HOW TO APPLY THE ULTRA-DEFENSIVE FIX MANUALLY
+================================================================================
+
+🔖 CHECKPOINT: 53ba4d106759d17bdc0f0bd78a0a558d9829c73c
+(Run: git checkout 53ba4d106759d17bdc0f0bd78a0a558d9829c73c to restore if needed)
+
+================================================================================
+STEP-BY-STEP INSTRUCTIONS:
+================================================================================
+
+STEP 1: Open code.js in your editor
+   File: C:\Users\raguilar\Desktop\PGD-PC-Labs\FigmaPlugin-FigmaFile_ID-Sections\code.js
+
+STEP 2: Find the copySectionsToPage function
+   - Press Ctrl+F (or Cmd+F on Mac)
+   - Search for: async function copySectionsToPage
+   - Should be around line 575-580
+
+STEP 3: Select the ENTIRE function
+   - From: async function copySectionsToPage(targetPage, sectionNames, sourceSections, rowNumber) {
+   - To: The closing } of this function (around line 756)
+   - This includes ALL the code including the PASS 1 and PASS 2 sections
+
+STEP 4: Replace with the new ultra-defensive version
+   - Delete the selected function
+   - Copy the ENTIRE function from: ULTRA_DEFENSIVE_FIX.txt
+   - Paste it in place of the old function
+
+STEP 5: Save the file
+
+STEP 6: Reload the plugin in Figma
+   - In Figma: Plugins → Development → Reload plugin
+
+STEP 7: Test with data containing Rides-Masthead or Eats-Masthead
+
+================================================================================
+⚠️ IMPORTANT: What to KEEP and what to REPLACE
+================================================================================
+
+KEEP (don't touch these):
+✅ All code before copySectionsToPage function
+✅ All code after copySectionsToPage function
+✅ CONFIG settings
+✅ Column mappings
+✅ Other functions
+
+REPLACE (delete and replace with new version):
+❌ The ENTIRE copySectionsToPage function
+❌ From line ~575 to line ~756
+❌ Everything between "async function copySectionsToPage" and its closing }
+
+================================================================================
+🎯 QUICK VERIFICATION:
+================================================================================
+
+After replacing, your copySectionsToPage function should:
+1. Start with: console.log('\n🔒🔒🔒 ROW ' + rowNumber + ' START (ULTRA-DEFENSIVE MODE) 🔒🔒🔒');
+2. Have a for loop with: console.log('\n━━━ Section ' + (i + 1) + '/' + sectionNames.length + ': ' + sectionName + ' ━━━');
+3. Include checks like: if (clonedSection.parent && clonedSection.parent !== targetPage) {
+4. Include cleanup code: // 🔒 SAFEGUARD 9: Cleanup any orphaned clones
+5. End with: console.log(''); // Empty line for readability
+
+If you see these, you've successfully replaced the function!
+
+================================================================================
+📝 ALTERNATIVE: Copy-Paste from ULTRA_DEFENSIVE_FIX.txt
+================================================================================
+
+If the above is unclear:
+
+1. Open ULTRA_DEFENSIVE_FIX.txt
+2. Find the section that starts with:
+   // =============================================================================
+   // SECTION COPYING LOGIC - ULTRA-DEFENSIVE VERSION
+   // =============================================================================
+
+3. Copy everything from:
+   async function copySectionsToPage(targetPage, sectionNames, sourceSections, rowNumber) {
+
+4. Down to and including the closing:
+   }
+
+5. In code.js, replace the OLD copySectionsToPage function with this new one
+
+================================================================================
+✅ DONE!
+================================================================================
+
+You're ready to test! The new version will:
+- Automatically detect and fix wrong-parent issues
+- Clean up orphaned clones from Source_Template
+- Provide detailed logging to diagnose any remaining issues
+
+================================================================================

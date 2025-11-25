@@ -572,17 +572,16 @@ async function loadFontsForSection(section) {
 // =============================================================================
 
 async function copySectionsToPage(targetPage, sectionNames, sourceSections, rowNumber) {
-  console.log('\n=== ROW ' + rowNumber + ' START ===');
+  console.log('\n🔒🔒🔒 ROW ' + rowNumber + ' START (ULTRA-DEFENSIVE MODE) 🔒🔒🔒');
   console.log('Target page: ' + targetPage.name);
   console.log('Sections to copy: ' + sectionNames.join(', '));
 
-  // Force page switch
+  // 🔒 CRITICAL: Lock to target page and verify
   figma.currentPage = targetPage;
-  console.log('Current page set to: ' + figma.currentPage.name);
+  console.log('✅ Current page locked to: ' + figma.currentPage.name);
 
   // Track successful and failed sections
   const successfulSections = [];
-  const failedSections = [];
   const permanentFailures = [];
 
   // Position tracking
@@ -591,15 +590,12 @@ async function copySectionsToPage(targetPage, sectionNames, sourceSections, rowN
   let rowHeight = 0;
 
   // =============================================================================
-  // PASS 1: Initial copy attempt for all sections
+  // PROCESS EACH SECTION WITH ULTRA-DEFENSIVE SAFEGUARDS
   // =============================================================================
-  console.log('\n=== PASS 1: Initial Copy Attempt ===');
-  console.log('Attempting to copy ' + sectionNames.length + ' sections...\n');
-
   for (let i = 0; i < sectionNames.length; i++) {
     const sectionName = sectionNames[i];
 
-    console.log('--- Section ' + (i + 1) + '/' + sectionNames.length + ': ' + sectionName + ' ---');
+    console.log('\n━━━ Section ' + (i + 1) + '/' + sectionNames.length + ': ' + sectionName + ' ━━━');
 
     // Find section in source
     const sourceSection = sourceSections.find(function (section) {
@@ -612,35 +608,84 @@ async function copySectionsToPage(targetPage, sectionNames, sourceSections, rowN
         name: sectionName,
         reason: 'Section not found in source file'
       });
+      // Reserve space
+      currentX += 300 + CONFIG.SECTION_SPACING;
       continue;
     }
 
-    // Ensure we're on the correct page before cloning
+    // 🔒 SAFEGUARD 1: Re-lock page before EVERY section
+    console.log('🔒 Pre-clone page lock: ' + targetPage.name);
+    figma.currentPage = targetPage;
+    
+    // Verify lock
     if (figma.currentPage !== targetPage) {
-      console.warn('⚠️ Page drift detected! Switching back to target page...');
-      figma.currentPage = targetPage;
+      console.error('❌ CRITICAL: Failed to lock page! Skipping section.');
+      permanentFailures.push({
+        name: sectionName,
+        reason: 'Failed to lock target page'
+      });
+      currentX += sourceSection.width + CONFIG.SECTION_SPACING;
+      continue;
     }
 
-    console.log('📋 Attempting to clone \"' + sectionName + '\"...');
-
     try {
-      // Clone the section
-      const clonedSection = sourceSection.node.clone();
+      // 🔒 SAFEGUARD 2: Get source page reference
+      const sourcePage = sourceSection.node.parent;
+      console.log('📍 Source section location: ' + (sourcePage ? sourcePage.name : 'NO PARENT'));
 
-      // Verify page didn't change after clone
-      if (figma.currentPage !== targetPage) {
-        console.error('❌ Clone changed current page! Forcing switch back...');
-        figma.currentPage = targetPage;
+      // 🔒 SAFEGUARD 3: Clone with immediate verification
+      console.log('🔄 Cloning section...');
+      let clonedSection = sourceSection.node.clone();
+      
+      console.log('✅ Clone created');
+      console.log('📍 Current page after clone: ' + figma.currentPage.name);
+      console.log('📍 Clone parent after clone: ' + (clonedSection.parent ? clonedSection.parent.name : 'NO PARENT'));
+
+      // 🔒 SAFEGUARD 4: CRITICAL - If clone has wrong parent, REMOVE IT IMMEDIATELY
+      if (clonedSection.parent && clonedSection.parent !== targetPage) {
+        console.error('🚨 WRONG PARENT DETECTED: ' + clonedSection.parent.name);
+        console.log('🧹 Removing clone from wrong parent...');
+        clonedSection.remove();
+        console.log('❌ Clone removed from wrong parent');
+        
+        // Re-clone after cleanup
+        console.log('🔄 Re-cloning after cleanup...');
+        figma.currentPage = targetPage; // Re-lock
+        clonedSection = sourceSection.node.clone();
+        
+        // Verify re-clone
+        if (clonedSection.parent && clonedSection.parent !== targetPage) {
+          console.error('🚨 RE-CLONE STILL HAS WRONG PARENT! Permanent failure.');
+          clonedSection.remove();
+          throw new Error('Clone created on wrong page despite safeguards');
+        }
+        
+        console.log('✅ Re-clone successful with correct parent');
       }
 
-      // Set position
+      // 🔒 SAFEGUARD 5: Force page lock again before positioning
+      figma.currentPage = targetPage;
+
+      // 🔒 SAFEGUARD 6: Set position
       clonedSection.x = currentX;
       clonedSection.y = currentY;
+      console.log('📍 Position set: (' + currentX + ', ' + currentY + ')');
 
-      // Append to target page
-      targetPage.appendChild(clonedSection);
+      // 🔒 SAFEGUARD 7: Append to target page with verification
+      if (clonedSection.parent !== targetPage) {
+        console.log('📌 Appending to target page...');
+        targetPage.appendChild(clonedSection);
+        console.log('✅ Appended successfully');
+      } else {
+        console.log('✅ Already on target page');
+      }
 
-      console.log('✅ SUCCESS: \"' + sectionName + '\" copied');
+      // 🔒 SAFEGUARD 8: Final verification
+      if (clonedSection.parent !== targetPage) {
+        throw new Error('Clone not on target page after appendChild');
+      }
+
+      console.log('✅✅✅ SUCCESS: "' + sectionName + '" copied successfully');
 
       // Track success
       successfulSections.push({
@@ -654,137 +699,70 @@ async function copySectionsToPage(targetPage, sectionNames, sourceSections, rowN
       currentX += sourceSection.width + CONFIG.SECTION_SPACING;
 
     } catch (error) {
-      console.warn('⚠️ FAILED (will retry): \"' + sectionName + '\"');
-      console.warn('   Error: ' + error.message);
+      console.error('❌ FAILED: "' + sectionName + '"');
+      console.error('   Error: ' + error.message);
+      console.error('   Stack: ' + error.stack);
 
-      // Track failure for retry
-      failedSections.push({
+      // Track permanent failure
+      permanentFailures.push({
         name: sectionName,
-        sourceSection: sourceSection,
-        error: error.message
+        reason: error.message
       });
 
-      // Reserve space to maintain layout consistency
-      currentX += sourceSection.width + CONFIG.SECTION_SPACING;
-    }
-  }
-
-  console.log('\n--- Pass 1 Summary ---');
-  console.log('✅ Successful: ' + successfulSections.length);
-  console.log('⚠️ Failed (will retry): ' + failedSections.length);
-  console.log('❌ Not found: ' + permanentFailures.length);
-
-  // =============================================================================
-  // PASS 2: Retry failed sections
-  // =============================================================================
-  if (failedSections.length > 0) {
-    console.log('\n=== PASS 2: Retry Failed Sections ===');
-    console.log('Retrying ' + failedSections.length + ' failed sections...\n');
-
-    // Send UI notification about retry
-    figma.ui.postMessage({
-      type: 'status',
-      message: '🔄 Retrying ' + failedSections.length + ' failed sections for row ' + rowNumber + '...'
-    });
-
-    // Reset position to start of row for retries
-    currentX = CONFIG.PAGE_MARGIN;
-
-    for (let i = 0; i < failedSections.length; i++) {
-      const failedItem = failedSections[i];
-      const sectionName = failedItem.name;
-      const sourceSection = failedItem.sourceSection;
-
-      console.log('--- Retry ' + (i + 1) + '/' + failedSections.length + ': ' + sectionName + ' ---');
-
-      // Calculate position (skip already successful sections)
-      let retryX = CONFIG.PAGE_MARGIN;
-      for (let j = 0; j < sectionNames.length; j++) {
-        if (sectionNames[j] === sectionName) {
-          break;
-        }
-        const prevSection = sourceSections.find(function (s) { return s.name === sectionNames[j]; });
-        if (prevSection) {
-          retryX += prevSection.width + CONFIG.SECTION_SPACING;
-        }
-      }
-
-      // Ensure we're on the correct page
-      if (figma.currentPage !== targetPage) {
-        console.warn('⚠️ Page drift detected! Switching back to target page...');
-        figma.currentPage = targetPage;
-      }
-
-      console.log('📋 Retry attempt for \"' + sectionName + '\"...');
-
+      // 🔒 SAFEGUARD 9: Cleanup any orphaned clones on Source_Template
+      console.log('🧹 Checking for orphaned clones on source page...');
       try {
-        // Clone the section
-        const clonedSection = sourceSection.node.clone();
-
-        // Verify page didn't change
-        if (figma.currentPage !== targetPage) {
-          console.error('❌ Clone changed current page! Forcing switch back...');
-          figma.currentPage = targetPage;
+        const allPages = figma.root.children;
+        for (let p = 0; p < allPages.length; p++) {
+          const page = allPages[p];
+          if (page.type === 'PAGE' && (page.name === 'Source_Template' || page.name === 'MASTER TEMPLATES')) {
+            const orphanedSections = page.findAll(function(node) {
+              return node.type === 'SECTION' && node.name === sectionName;
+            });
+            
+            // If there are MORE than 1 of this section (the original), remove extras
+            if (orphanedSections.length > 1) {
+              console.log('🚨 Found ' + orphanedSections.length + ' copies of "' + sectionName + '" on ' + page.name);
+              console.log('🧹 Removing ' + (orphanedSections.length - 1) + ' orphaned clones...');
+              
+              for (let o = 1; o < orphanedSections.length; o++) {
+                orphanedSections[o].remove();
+                console.log('   ✅ Removed orphaned clone ' + o);
+              }
+            }
+          }
         }
-
-        // Set position
-        clonedSection.x = retryX;
-        clonedSection.y = currentY;
-
-        // Append to target page
-        targetPage.appendChild(clonedSection);
-
-        console.log('✅ SUCCESS on retry: \"' + sectionName + '\" copied');
-
-        // Track success
-        successfulSections.push({
-          name: sectionName,
-          width: sourceSection.width,
-          height: sourceSection.height
-        });
-
-        // Update row height
-        rowHeight = Math.max(rowHeight, sourceSection.height);
-
-        // Send success notification
-        figma.ui.postMessage({
-          type: 'status',
-          message: '✅ Retry successful: \"' + sectionName + '\"'
-        });
-
-      } catch (retryError) {
-        console.error('❌ RETRY FAILED: \"' + sectionName + '\"');
-        console.error('   Error: ' + retryError.message);
-
-        // Track permanent failure
-        permanentFailures.push({
-          name: sectionName,
-          reason: 'Failed after retry: ' + retryError.message
-        });
-
-        // Send warning notification
-        figma.ui.postMessage({
-          type: 'warning',
-          message: '⚠️ Permanently skipped \"' + sectionName + '\" after retry failed'
-        });
+      } catch (cleanupError) {
+        console.error('   ⚠️ Cleanup failed: ' + cleanupError.message);
       }
+
+      // Reserve space for failed section
+      currentX += sourceSection.width + CONFIG.SECTION_SPACING;
+
+      // Send warning to UI
+      figma.ui.postMessage({
+        type: 'warning',
+        message: '⚠️ Failed to copy "' + sectionName + '" in row ' + rowNumber
+      });
     }
 
-    console.log('\n--- Pass 2 Summary ---');
-    console.log('✅ Successful retries: ' + (successfulSections.length - (sectionNames.length - failedSections.length - permanentFailures.length)));
-    console.log('❌ Permanent failures: ' + permanentFailures.length);
+    // 🔒 SAFEGUARD 10: Verify we're still on correct page after section
+    if (figma.currentPage !== targetPage) {
+      console.warn('⚠️ Page drift detected after section ' + (i + 1) + '! Forcing back...');
+      figma.currentPage = targetPage;
+    }
   }
 
   // =============================================================================
   // Final Summary
   // =============================================================================
-  console.log('\n=== ROW ' + rowNumber + ' COMPLETE ===');
+  console.log('\n🏁🏁🏁 ROW ' + rowNumber + ' COMPLETE 🏁🏁🏁');
   console.log('📊 Final Summary:');
-  console.log('   ✅ Total successful: ' + successfulSections.length + '/' + sectionNames.length);
-  console.log('   ❌ Total failed: ' + permanentFailures.length + '/' + sectionNames.length);
+  console.log('   ✅ Successful: ' + successfulSections.length + '/' + sectionNames.length);
+  console.log('   ❌ Failed: ' + permanentFailures.length + '/' + sectionNames.length);
 
   if (permanentFailures.length > 0) {
-    console.log('\n⚠️ Permanently failed sections:');
+    console.log('\n⚠️ Failed sections:');
     permanentFailures.forEach(function (failure) {
       console.log('   - ' + failure.name + ': ' + failure.reason);
     });

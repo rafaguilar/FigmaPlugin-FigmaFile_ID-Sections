@@ -1,0 +1,70 @@
+================================================================================
+DEEP ANALYSIS OF DUPLICATION ISSUE - RIDES-MASTHEAD & EATS-MASTHEAD
+================================================================================
+
+🔍 ROOT CAUSE ANALYSIS:
+================================================================================
+
+Based on the symptoms you described:
+
+1. **Symptom**: Sections fail to duplicate on new pages
+2. **Symptom**: Empty space left where sections should be
+3. **Symptom**: Duplicates appearing on Source_Template page
+4. **Symptom**: Font loading issues with these specific sections
+
+🎯 LIKELY ROOT CAUSE:
+
+The issue appears to be a RACE CONDITION during the clone operation:
+
+```
+SEQUENCE OF EVENTS (CURRENT CODE):
+1. figma.currentPage = targetPage           // Set to new page
+2. const clonedSection = section.clone()    // Clone operation
+   ⚠️ PROBLEM: During clone(), Figma API may:
+      - Temporarily switch figma.currentPage back to source page
+      - Font loading errors trigger page context changes
+      - Clone initially created on wrong page (Source_Template)
+3. targetPage.appendChild(clonedSection)    // Try to move clone
+   ⚠️ PROBLEM: If clone already has Source_Template as parent,
+      appendChild may fail or create duplicate
+4. Error occurs, section skipped, but duplicate remains on Source_Template
+```
+
+🔧 THE FIX STRATEGY:
+================================================================================
+
+We need to implement ULTRA-DEFENSIVE cloning with these safeguards:
+
+1. **LOCK PAGE** before and after every operation
+2. **VERIFY** clone has NO parent before appending
+3. **CLEANUP** any clones found on wrong pages IMMEDIATELY
+4. **ISOLATE** the source section from its page during clone
+5. **FONT PRELOAD** specifically for problematic sections
+
+================================================================================
+IMPLEMENTATION PLAN:
+================================================================================
+
+APPROACH 1: DETACHED CLONE METHOD (Recommended)
+-----------------------------------------------
+- Clone the section while it's detached from any page
+- This prevents Figma from assuming parent page context
+- Then explicitly attach to target page
+
+APPROACH 2: IMMEDIATE PARENT VERIFICATION
+-----------------------------------------
+- After clone(), immediately check clone.parent
+- If parent !== null && parent !== targetPage, REMOVE it
+- Then appendChild to correct page
+
+APPROACH 3: TEMPORARY PAGE METHOD
+---------------------------------
+- Create temporary page for cloning operations
+- Move source section to temp page
+- Clone there (isolated from Source_Template)
+- Move clone to target page
+- Move source back to Source_Template
+
+We'll implement a COMBINATION of all three for maximum safety.
+
+================================================================================
