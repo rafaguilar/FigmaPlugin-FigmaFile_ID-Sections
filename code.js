@@ -419,10 +419,36 @@ async function processRow(row, rowNumber, sourceSections) {
   const newPage = figma.createPage();
   newPage.name = pageName;
 
-  // Step 3.5: 🔒 CRITICAL - Switch to the new page IMMEDIATELY to prevent writing to Source_Template
+  // Step 3.5: 🔒 CRITICAL - Switch to the new page with VERIFICATION
   console.log('🔒 SWITCHING to newly created page: "' + pageName + '"');
-  figma.currentPage = newPage;
-  console.log('✅ Current page is now: "' + figma.currentPage.name + '"');
+  
+  // Try multiple times if needed (Figma API sometimes delays page switches)
+  let switchAttempts = 0;
+  const maxAttempts = 3;
+  
+  while (figma.currentPage !== newPage && switchAttempts < maxAttempts) {
+    figma.currentPage = newPage;
+    switchAttempts++;
+    
+    // Small delay to let Figma process the switch
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    if (figma.currentPage === newPage) {
+      console.log('✅ Successfully switched to: "' + figma.currentPage.name + '" (attempt ' + switchAttempts + ')');
+      break;
+    } else {
+      console.warn('⚠️ Switch attempt ' + switchAttempts + ' failed, current page is: "' + figma.currentPage.name + '"');
+    }
+  }
+  
+  // Final verification
+  if (figma.currentPage !== newPage) {
+    console.error('❌ CRITICAL: Failed to switch to new page after ' + maxAttempts + ' attempts!');
+    console.error('   Current page: "' + figma.currentPage.name + '"');
+    console.error('   Target page: "' + newPage.name + '"');
+  } else {
+    console.log('✅ Current page confirmed: "' + figma.currentPage.name + '"');
+  }
 
   // Step 4: Copy sections to the page with improved error handling
   await copySectionsToPage(newPage, sectionsToInclude, sourceSections, rowNumber);
@@ -576,8 +602,40 @@ async function copySectionsToPage(targetPage, sectionNames, sourceSections, rowN
   console.log('Target page: ' + targetPage.name);
   console.log('Sections to copy: ' + sectionNames.join(', '));
 
-  // 🔒 CRITICAL: Lock to target page and verify
-  figma.currentPage = targetPage;
+  // 🔒 CRITICAL: Lock to target page with retry and verification
+  console.log('🔒 Initial page lock attempt...');
+  
+  let lockAttempts = 0;
+  const maxLockAttempts = 5;
+  
+  while (figma.currentPage !== targetPage && lockAttempts < maxLockAttempts) {
+    figma.currentPage = targetPage;
+    lockAttempts++;
+    
+    // Small delay to let Figma process
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    if (figma.currentPage === targetPage) {
+      console.log('✅ Page locked successfully (attempt ' + lockAttempts + ')');
+      break;
+    } else {
+      console.warn('⚠️ Lock attempt ' + lockAttempts + ' failed, current: "' + figma.currentPage.name + '"');
+    }
+  }
+  
+  // Final verification before proceeding
+  if (figma.currentPage !== targetPage) {
+    console.error('❌ CRITICAL: Failed to lock to target page after ' + maxLockAttempts + ' attempts!');
+    console.error('   Current: "' + figma.currentPage.name + '" | Target: "' + targetPage.name + '"');
+    
+    figma.ui.postMessage({
+      type: 'error',
+      message: '❌ Failed to switch to page "' + targetPage.name + '" - all sections skipped'
+    });
+    
+    return;
+  }
+  
   console.log('✅ Current page locked to: ' + figma.currentPage.name);
 
   // Track successful and failed sections
