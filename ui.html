@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Google Sheets Component Generator</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      margin: 0;
+      padding: 20px;
+      background: #ffffff;
+      color: #333;
+    }
+    
+    .container {
+      max-width: 360px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0 0 20px 0;
+      color: #333;
+    }
+    
+    .form-group {
+      margin-bottom: 16px;
+      transition: opacity 0.3s ease-in-out;
+    }
+    
+    .form-group.fade-in {
+      animation: fadeIn 0.3s ease-in-out;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 500;
+      color: #333;
+    }
+    
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    
+    input:focus {
+      outline: none;
+      border-color: #18a0fb;
+    }
+    
+    .button {
+      width: 100%;
+      padding: 12px;
+      background: #18a0fb;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+    
+    .button:hover:not(:disabled) {
+      background: #1592e6;
+    }
+    
+    .button:disabled {
+      background: #bdc3c7;
+      cursor: not-allowed;
+    }
+    
+    .button.secondary {
+      background: #f8f9fa;
+      color: #495057;
+      border: 1px solid #dee2e6;
+    }
+    
+    .button.test {
+      background: #6c757d;
+      margin-bottom: 16px;
+    }
+    
+    .button.test.success {
+      background: #28a745;
+    }
+    
+    .button.success {
+      background: #28a745;
+    }
+    
+    .button.success:hover:not(:disabled) {
+      background: #218838;
+    }
+    
+    .button.delete {
+      background: #dc3545;
+      margin-top: 16px;
+    }
+    
+    .button.delete:hover:not(:disabled) {
+      background: #c82333;
+    }
+    
+    .delete-message {
+      display: none;
+      background: #fff3cd;
+      border: 1px solid #ffeeba;
+      border-radius: 6px;
+      padding: 12px;
+      margin: 16px 0 8px 0;
+      font-size: 13px;
+      color: #856404;
+    }
+    
+    .delete-message.show {
+      display: block;
+      animation: fadeIn 0.3s ease-in-out;
+    }
+    
+    .status {
+      padding: 12px;
+      margin: 16px 0;
+      border-radius: 6px;
+      font-size: 13px;
+      display: none;
+      border-left: 4px solid;
+    }
+    
+    .status.info {
+      background: #e3f2fd;
+      color: #1976d2;
+      border-left-color: #2196f3;
+    }
+    
+    .status.success {
+      background: #e8f5e8;
+      color: #2e7d32;
+      border-left-color: #4caf50;
+    }
+    
+    .status.error {
+      background: #ffebee;
+      color: #c62828;
+      border-left-color: #f44336;
+    }
+    
+    .help-text {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+    }
+    
+    .checkbox-container {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      font-size: 14px;
+      margin-bottom: 0;
+    }
+    
+    .checkbox-container input[type="checkbox"] {
+      margin-right: 8px;
+      transform: scale(1.1);
+    }
+    
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📊 Google Sheets Section Extractor</h1>
+    
+    <div class="form-group">
+      <label for="apiKey">Google Sheets API Key:</label>
+      <input type="password" id="apiKey" placeholder="Enter your API key" onchange="validateInputs()">
+      <div class="help-text">Get this from Google Cloud Console → APIs & Credentials</div>
+    </div>
+    
+    <div class="form-group">
+      <label for="spreadsheetId">Spreadsheet ID:</label>
+      <input type="text" id="spreadsheetId" placeholder="e.g., 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms" onchange="validateInputs()">
+      <div class="help-text">Found in your Google Sheets URL between /d/ and /edit</div>
+    </div>
+    
+    <div class="form-group" id="deleteMasterCheckboxGroup" style="display: none;">
+      <label class="checkbox-container">
+        <input type="checkbox" id="deleteMasterTemplates">
+        <span class="checkmark"></span>
+        Delete "MASTER TEMPLATES" page after generation
+      </label>
+      <div class="help-text">⚠️ This will permanently remove the template page</div>
+    </div>
+    
+    <button class="button test" id="testBtn" onclick="testConnection()" disabled>
+      Test Connection
+    </button>
+    
+    <div class="status" id="status"></div>
+    
+    <div class="loading" id="loading">
+      <div>Processing...</div>
+    </div>
+    
+    <button class="button" id="generateBtn" onclick="startGeneration()" disabled>
+      Extract Sections to Pages
+    </button>
+    
+    <div class="delete-message" id="deleteMessage">
+      Delete "MASTER TEMPLATES" page after it's generated<br>
+      ⚠️ This will permanently remove the template page
+    </div>
+    
+    <button class="button delete" id="deleteMasterBtn" onclick="deleteMasterTemplates()">
+      🗑️ Delete "MASTER TEMPLATES" Page
+    </button>
+    
+    <button class="button secondary" id="cancelBtn" onclick="cancel()">
+      Cancel
+    </button>
+  </div>
+
+  <script>
+    var isProcessing = false;
+    
+    onmessage = function(event) {
+      var msg = event.data.pluginMessage;
+      
+      if (msg.type === 'ready') {
+        console.log('Plugin ready');
+      } else if (msg.type === 'status') {
+        showStatus(msg.message, 'info');
+      } else if (msg.type === 'success') {
+        showStatus(msg.message, 'success');
+        setProcessing(false);
+        
+        // Check if this is a test connection success
+        if (msg.message.includes('Connection successful')) {
+          updateTestConnectionSuccess();
+        }
+        
+        // Check if this is generation completion
+        if (msg.message.includes('Generation complete')) {
+          updateGenerationSuccess();
+        }
+        
+        // Check if this is delete success
+        if (msg.message.includes('MASTER TEMPLATES page deleted')) {
+          updateDeleteSuccess();
+        }
+        
+      } else if (msg.type === 'error') {
+        showStatus(msg.message, 'error');
+        setProcessing(false);
+      }
+    };
+    
+    function validateInputs() {
+      var apiKey = document.getElementById('apiKey').value.trim();
+      var spreadsheetId = document.getElementById('spreadsheetId').value.trim();
+      var isValid = apiKey.length > 0 && spreadsheetId.length > 0;
+      
+      var testBtn = document.getElementById('testBtn');
+      var generateBtn = document.getElementById('generateBtn');
+      
+      // Only enable buttons if they haven't been completed yet
+      if (!testBtn.classList.contains('success')) {
+        testBtn.disabled = !isValid;
+      }
+      if (!generateBtn.classList.contains('success')) {
+        generateBtn.disabled = !isValid;
+      }
+    }
+    
+    function testConnection() {
+      var apiKey = document.getElementById('apiKey').value.trim();
+      var spreadsheetId = document.getElementById('spreadsheetId').value.trim();
+      
+      setProcessing(true);
+      
+      parent.postMessage({
+        pluginMessage: {
+          type: 'test-connection',
+          apiKey: apiKey,
+          spreadsheetId: spreadsheetId
+        }
+      }, '*');
+    }
+    
+    function startGeneration() {
+      var apiKey = document.getElementById('apiKey').value.trim();
+      var spreadsheetId = document.getElementById('spreadsheetId').value.trim();
+      var deleteMasterTemplates = document.getElementById('deleteMasterTemplates').checked;
+      
+      var confirmMessage = 'This will create new pages in your current Figma file.';
+      
+      if (deleteMasterTemplates) {
+        confirmMessage += '\n\n⚠️ WARNING: This will also permanently delete the "MASTER TEMPLATES" page after generation.';
+      }
+      
+      confirmMessage += '\n\nContinue?';
+      
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+      
+      setProcessing(true);
+      
+      parent.postMessage({
+        pluginMessage: {
+          type: 'start-generation',
+          apiKey: apiKey,
+          spreadsheetId: spreadsheetId,
+          deleteMasterTemplates: deleteMasterTemplates
+        }
+      }, '*');
+    }
+    
+    function deleteMasterTemplates() {
+      // Show the checkbox group for future auto-deletion option
+      var checkboxGroup = document.getElementById('deleteMasterCheckboxGroup');
+      if (checkboxGroup.style.display === 'none') {
+        checkboxGroup.style.display = 'block';
+        checkboxGroup.classList.add('fade-in');
+      }
+      
+      var confirmMessage = '⚠️ WARNING: This will permanently delete the "MASTER TEMPLATES" page.\n\nThis action cannot be undone. Continue?';
+      
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+      
+      setProcessing(true);
+      
+      parent.postMessage({
+        pluginMessage: {
+          type: 'delete-master-templates'
+        }
+      }, '*');
+    }
+    
+    function updateTestConnectionSuccess() {
+      var testBtn = document.getElementById('testBtn');
+      testBtn.textContent = 'Connection Checked ✓';
+      testBtn.classList.add('success');
+      testBtn.disabled = true;
+    }
+    
+    function updateGenerationSuccess() {
+      var generateBtn = document.getElementById('generateBtn');
+      generateBtn.textContent = 'Extract Sections to Pages - Done! ✓';
+      generateBtn.classList.add('success');
+      generateBtn.disabled = true;
+      
+      // Show the delete message
+      var deleteMessage = document.getElementById('deleteMessage');
+      deleteMessage.classList.add('show');
+    }
+    
+    function updateDeleteSuccess() {
+      // Hide the delete button
+      var deleteMasterBtn = document.getElementById('deleteMasterBtn');
+      deleteMasterBtn.style.display = 'none';
+      
+      // Hide the delete message
+      var deleteMessage = document.getElementById('deleteMessage');
+      deleteMessage.classList.remove('show');
+      
+      // Change Cancel to Close
+      var cancelBtn = document.getElementById('cancelBtn');
+      cancelBtn.textContent = 'Close';
+    }
+    
+    function cancel() {
+      parent.postMessage({
+        pluginMessage: { type: 'cancel' }
+      }, '*');
+    }
+    
+    function setProcessing(processing) {
+      isProcessing = processing;
+      var generateBtn = document.getElementById('generateBtn');
+      var testBtn = document.getElementById('testBtn');
+      var deleteMasterBtn = document.getElementById('deleteMasterBtn');
+      var loading = document.getElementById('loading');
+      
+      if (processing) {
+        // Only disable buttons that haven't been completed yet
+        if (!generateBtn.classList.contains('success')) {
+          generateBtn.disabled = true;
+        }
+        if (!testBtn.classList.contains('success')) {
+          testBtn.disabled = true;
+        }
+        deleteMasterBtn.disabled = true;
+        loading.style.display = 'block';
+      } else {
+        validateInputs();
+        deleteMasterBtn.disabled = false;
+        loading.style.display = 'none';
+      }
+    }
+    
+    function showStatus(message, type) {
+      var status = document.getElementById('status');
+      status.textContent = message;
+      status.className = 'status ' + type;
+      status.style.display = 'block';
+      
+      if (type === 'success') {
+        setTimeout(function() {
+          status.style.display = 'none';
+        }, 5000);
+      }
+    }
+  </script>
+</body>
+</html>

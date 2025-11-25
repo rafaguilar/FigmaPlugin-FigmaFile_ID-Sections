@@ -1,0 +1,18 @@
+{
+  "name": "Google Sheets Section Extractor",
+  "id": "google-sheets-section-extractor",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "capabilities": [],
+  "enableProposedApi": false,
+  "editorType": [
+    "figma"
+  ],
+  "networkAccess": {
+    "allowedDomains": [
+      "https://sheets.googleapis.com",
+      "https://www.googleapis.com"
+    ]
+  }
+}
