@@ -4,13 +4,31 @@
 figma.showUI(__html__, { width: 400, height: 600 });
 
 // =============================================================================
-// CONFIGURATION - Update these values with your actual source file ID
+// 🔧 SETUP INSTRUCTIONS - UPDATE THESE VALUES BEFORE FIRST USE
+// =============================================================================
+// 1. Get Google Sheets API Key:
+//    - Go to https://console.cloud.google.com/
+//    - Create/select project → Enable Google Sheets API → Create API Key
+//    - Replace 'YOUR_GOOGLE_SHEETS_API_KEY_HERE' below
+//
+// 2. Get Spreadsheet ID:
+//    - Open your Google Sheet
+//    - Copy ID from URL: docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit
+//    - Replace 'YOUR_SPREADSHEET_ID_HERE' below
+//    - Make sure sheet is publicly readable or shared with appropriate permissions
+//
+// 3. Verify spreadsheet column structure matches:
+//    Cols A-D: Account, Trigger, KeyMessage, Dates
+//    Cols E-Q: Push, Ring-NewB, Rides-Interstitial, Eats-Interstitial, 
+//              Rides-Masthead, Eats-Masthead, Eats-Billboard, Email-Module,
+//              LandingPage, Email, Ucraft, Partner-Rewards-Hub, Eats-Storefront-Ring
+//    Col R: Comments (ignored)
 // =============================================================================
 
 const CONFIG = {
-  GOOGLE_SHEETS_API_KEY: 'HERE YOUR GOOGLE_APY_KEY', // Set this from your config
-  SPREADSHEET_ID: '1HneZCjZcNQ2I6I3HkWRda7FE_a0Z9RTHtoNAZjPfFws', // Set this from your config 
-  RANGE: 'Sheet1!A:R', // Updated range to accommodate new columns (A-R = 18 columns)
+  GOOGLE_SHEETS_API_KEY: 'YOUR_GOOGLE_SHEETS_API_KEY_HERE', // ⚠️ Replace with your API key
+  SPREADSHEET_ID: 'YOUR_SPREADSHEET_ID_HERE',               // ⚠️ Replace with your spreadsheet ID
+  RANGE: 'Sheet1!A:R', // Range to read (A-R = 18 columns)
   
   // Plugin Settings
   SECTION_SPACING: 250,
@@ -238,11 +256,25 @@ async function testGoogleSheetsConnection(apiKey, spreadsheetId) {
 function validateConfiguration() {
   const errors = [];
   
-  // Note: Source file ID is no longer required since we're using current file
-  // The sections should be present in the current file
+  // Check if API key is still a placeholder
+  if (!CONFIG.GOOGLE_SHEETS_API_KEY || 
+      CONFIG.GOOGLE_SHEETS_API_KEY === 'YOUR_GOOGLE_SHEETS_API_KEY_HERE' ||
+      CONFIG.GOOGLE_SHEETS_API_KEY === 'HERE YOUR GOOGLE_APY_KEY') {
+    errors.push('❌ Google Sheets API key not configured. Please update CONFIG.GOOGLE_SHEETS_API_KEY in code.js');
+  }
   
+  // Check if spreadsheet ID is still a placeholder
+  if (!CONFIG.SPREADSHEET_ID || CONFIG.SPREADSHEET_ID === 'YOUR_SPREADSHEET_ID_HERE') {
+    errors.push('❌ Spreadsheet ID not configured. Please update CONFIG.SPREADSHEET_ID in code.js');
+  }
+  
+  // Note: API key and Spreadsheet ID can also be provided via UI,
+  // so these are warnings rather than hard errors
   if (errors.length > 0) {
-    throw new Error('Configuration validation failed:\n' + errors.join('\n'));
+    console.warn('⚠️ Configuration warnings:\n  ' + errors.join('\n  '));
+    console.warn('💡 You can provide credentials via the plugin UI instead');
+  } else {
+    console.log('✅ Configuration validation passed');
   }
 }
 
